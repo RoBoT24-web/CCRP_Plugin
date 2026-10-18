@@ -108,6 +108,12 @@
     <Compile Include="Commands\CCRPWreckItemCommand.cs" />
     <Compile Include="Commands\CCRPWreckVehicleCommand.cs" />
     <Compile Include="Commands\CCRPWreckBuildableCommand.cs" />
+    <Compile Include="Commands\CCRPHomeCommand.cs" />
+    <Compile Include="Commands\CCRPSetHomeCommand.cs" />
+    <Compile Include="Commands\CCRPDelHomeCommand.cs" />
+    <Compile Include="Commands\CCRPHomesCommand.cs" />
+    <Compile Include="Database\HomeDatabase.cs" />
+    <Compile Include="Models\Home.cs" />
     <Compile Include="Database\PlayTimeDatabase.cs" />
     <Compile Include="Database\WarnDatabase.cs" />
     <Compile Include="Database\WarnLogDatabase.cs" />

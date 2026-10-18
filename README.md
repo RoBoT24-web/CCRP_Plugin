@@ -14,6 +14,10 @@ Command and Permission reference for CCRP plugin.
 | `/editor` | Toggles the in-game object editor (F6). Requires freecam permission aswell. | `CCRPbuild.editor` |
 | `/freecam` | Toggles freecam and camera controls (F1-F5). | `CCRPbuild.freecam` |
 | `/god [name]` | Toggles Godmode for yourself or, with the additional permission, another online player. | `ccrp.god`; `ccrp.god.others` for another player |
+| `/delhome <name>` | Deletes one of your homes. | `ccrp.delhome` |
+| `/home <name>` | Teleports you to one of your homes after a delay. Moving cancels it. | `ccrp.home` (5 second delay) or `ccrp.home.<n>` for an `<n>` second delay (0-300, 0 = instant; lowest held wins) |
+| `/homes` | Lists your homes and your home limit. | `ccrp.homes` |
+| `/sethome <name>` | Saves your position as a home. Reusing a name moves that home. Limit is per player. | `ccrp.sethome` (1 home) or `ccrp.sethome.<n>` for up to `<n>` homes (1-100; highest held wins) |
 | `/i <id-or-name> [amount]` (`/give`) | Gives an item by ID or name. Item blacklist rules and amount permissions apply. | `ccrp.i`; `ccrp.i.<n>` for the maximum amount, where `<n>` is 1-25 |
 | `/inv <name\|Steam64>` | Opens a view-only snapshot of all of an online player's items (hands, backpack, vest, shirt, pants) in your storage window. Edits don't change the target's inventory; items taken from the snapshot are removed from you again. Cannot target yourself. | `ccrp.inv` |
 | `/kick <name> <reason>` | Kicks an online player. | `ccrp.kick` |
@@ -32,6 +36,8 @@ Command and Permission reference for CCRP plugin.
 ## Permission Notes
 
 - To let `/give` grant amounts greater than one, grant the caller the appropriate `ccrp.i.<n>` permission. The number is the maximum amount allowed by that permission, up to 25.
+- Homes are stored per player in `Homes.json`. A player needs only one of `ccrp.sethome` or `ccrp.sethome.<n>` to use `/sethome`, and only one of `ccrp.home` or `ccrp.home.<n>` to use `/home`.
+- Rocket.Unturned has its own built-in `/home` (bed teleport). If it takes precedence on your server, disable it with `<Command Name="home" Enabled="false" />` in `Rocket\Commands.config.xml`.
 - `CCRPbuild.editor` enables the editor but does not grant permission to move other players' objects. Grant Unturned's `admin.editor.otherobjects` separately if that is intended.
 - Blacklists (give, pickup, both, and vehicle) are only bypassed by the entry's exact bypass permission or by `ccrp.bypass.all`. Admin/blue hammer status and the `*` wildcard do not bypass them. `ccrp.bypass.all` bypasses every item and vehicle blacklist.
 - Warning thresholds, actions, durations, and reasons are configurable in the `<Warnings>` section of `CCRP Plugin.configuration.xml`.

@@ -76,7 +76,7 @@ namespace CCRPPlugin
 
             Webhooks = new WebhookSettings();
             VehicleCleanup = new VehicleCleanupSettings();
-            DonationBypasses = new DonationBypassSettings();
+            DonationBypasses = new DonationBypassSettings { DeniedPermissions = new List<string> { "bypass.invis" } };
             MaxSkills = new MaxSkillsSettings();
 
             Groups = new List<DutyGroups>()
@@ -124,7 +124,8 @@ namespace CCRPPlugin
         public DonationBypassSettings()
         {
             Tiers = new List<DonationBypassTier>();
-            DeniedPermissions = new List<string> { "bypass.invis" };
+            // Must stay empty: XmlSerializer appends loaded items to a pre-filled list, duplicating defaults on every load.
+            DeniedPermissions = new List<string>();
         }
     }
 

@@ -40,6 +40,8 @@ namespace CCRPPlugin
 
         public PlayTimeDatabase PlayTimeDatabase { get; private set; }
 
+        public HomeDatabase HomeDatabase { get; private set; }
+
         public WarnLogDatabase WarnLogDatabase { get; private set; }
 
         public BlacklistSettings Blacklists { get; private set; }
@@ -68,6 +70,9 @@ namespace CCRPPlugin
 
             PlayTimeDatabase = new PlayTimeDatabase();
             PlayTimeDatabase.Reload();
+
+            HomeDatabase = new HomeDatabase();
+            HomeDatabase.Reload();
 
             LoadBlacklists();
             DonationBypassService = new DonationBypassService(this);
@@ -193,6 +198,12 @@ namespace CCRPPlugin
             {
                 Configuration.Instance.DonationBypasses.DeniedPermissions = new List<string>();
             }
+            // Clean up duplicates written by earlier versions.
+            Configuration.Instance.DonationBypasses.DeniedPermissions = Configuration.Instance.DonationBypasses.DeniedPermissions
+                .Where(p => !string.IsNullOrWhiteSpace(p))
+                .Distinct(System.StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            Configuration.Save();
             HashSet<string> donationGroupIds = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
             foreach (DonationBypassTier tier in Configuration.Instance.DonationBypasses.Tiers)
             {
@@ -944,6 +955,21 @@ namespace CCRPPlugin
             { "TphereSuccess", "You teleported {0} to yourself!" },
             { "TohereOtherPlayer", "You got teleported to {0}!" },
             { "TphereSyntax", "Please use /tphere <name>!" },
+            { "HomeSyntax", "Please use /home <name>!" },
+            { "SetHomeSyntax", "Please use /sethome <name>!" },
+            { "DelHomeSyntax", "Please use /delhome <name>!" },
+            { "HomeNotFound", "You don't have a home named {0}!" },
+            { "HomeTeleported", "You teleported to home {0}!" },
+            { "HomeTeleporting", "Teleporting to home {0} in {1} second(s). Don't move!" },
+            { "HomeCancelled", "Home teleport cancelled because you moved!" },
+            { "HomeSet", "Home {0} has been set!" },
+            { "HomeUpdated", "Home {0} has been moved to your current position!" },
+            { "HomeLimitReached", "You can only have {0} home(s). Delete one with /delhome <name> first!" },
+            { "HomeNoPermission", "You don't have permission to set homes!" },
+            { "HomeDeleted", "Home {0} has been deleted!" },
+            { "HomeList", "Your homes ({0}/{1}): {2}" },
+            { "HomeListEmpty", "You have no homes. Use /sethome <name> to set one!" },
+            { "HomeNameInvalid", "Home names must be 1-32 characters long!" },
             { "PlaytimeSuccess", "You have played {0} on the Server!" },
             { "PlaytimeOtherSuccess", "{0} has {1} playtime!" },
             { "PlaytimeSyntax", "Please use /playtime <name>!" },
