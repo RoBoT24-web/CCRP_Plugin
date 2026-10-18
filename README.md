@@ -8,6 +8,7 @@ Command and Permission reference for CCRP plugin.
 |---|---|---|
 | `/ban <name> <reason>` | Permanently bans a player. | `ccrp.ban` |
 | `/ban <name> <reason> <duration>` | Temporarily bans a player (`30m`, `2h`, `1d`). | `ccrp.ban` |
+| `/back` | Returns to your most recent death location. | `ccrp.back` |
 | `/blacklist add <give\|pickup\|both\|vehicle> <id> <bypass-permission>` | Adds an item or vehicle blacklist entry. | `ccrp.blacklist.manage` |
 | `/blacklist remove <give\|pickup\|both\|vehicle> <id>` | Removes a blacklist entry. | `ccrp.blacklist.manage` |
 | `/clear [-i] [-ev]` | Clears dropped items (`-i`; default) and/or empty vehicles (`-ev`). | `ccrp.clear` |
@@ -48,6 +49,7 @@ Command and Permission reference for CCRP plugin.
 | `/teleport <x> <y> <z>` | Teleports to coordinates. | `ccrp.teleport` |
 | `/tpa <player\|accept\|deny\|cancel>` | Sends or manages teleport requests (expire in 60s; teleport after 5s, cancelled by movement). | `ccrp.tpa` |
 | `/tphere <name>` | Teleports a player to you. | `ccrp.tphere` |
+| `/uncuff <player>` | Removes a player's handcuffs. | `ccrp.uncuff` |
 | `/unfreeze [player]` | Unfreezes a player or yourself. | `ccrp.unfreeze` |
 | `/warp <name>` | Teleports to a shared warp (5s; movement cancels). | `ccrp.warp` |
 | `/setwarp <name>` | Creates or updates a shared warp. | `ccrp.setwarp` |
@@ -63,6 +65,7 @@ Command and Permission reference for CCRP plugin.
 ## Permission Notes
 
 - Plugin-owned JSON files are stored in the plugin's `Data` folder. On its first startup after this update, existing top-level `.json` files are copied there only when the matching destination file does not already exist; the originals are retained as backups.
+- `/back` death locations are saved by Steam64 ID in `Data\DeathLocations.json` and persist across reconnects and server restarts.
 - To let `/give` grant amounts greater than one, grant the caller the appropriate `ccrp.i.<n>` permission. The number is the maximum amount allowed by that permission, up to 25.
 - Homes are stored per player in `Homes.json`. A player needs only one of `ccrp.sethome` or `ccrp.sethome.<n>` to use `/sethome`, and only one of `ccrp.home` or `ccrp.home.<n>` to use `/home`.
 - Rocket.Unturned has its own built-in `/home` (bed teleport). If it takes precedence on your server, disable it with `<Command Name="home" Enabled="false" />` in `Rocket\Commands.config.xml`.

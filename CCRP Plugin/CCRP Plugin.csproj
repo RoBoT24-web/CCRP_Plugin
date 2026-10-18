@@ -79,6 +79,7 @@
   <ItemGroup>
     <Compile Include="CCRPConfig.cs" />
     <Compile Include="Commands\CCRPBanCommand.cs" />
+    <Compile Include="Commands\CCRPBackCommand.cs" />
     <Compile Include="Commands\CCRPBlacklistCommand.cs" />
     <Compile Include="Commands\CCRPChatCommands.cs" />
     <Compile Include="Commands\CCRPBypassGroupCommand.cs" />
@@ -103,6 +104,7 @@
     <Compile Include="Commands\CCRPTeleportCommand.cs" />
     <Compile Include="Commands\CCRPTphereCommand.cs" />
     <Compile Include="Commands\CCRPUnbanCommand.cs" />
+    <Compile Include="Commands\CCRPUncuffCommand.cs" />
     <Compile Include="Commands\CCRPVanishCommand.cs" />
     <Compile Include="Commands\CCRPVehicleCommand.cs" />
     <Compile Include="Commands\CCRPVehicleFeaturesCommand.cs" />
@@ -137,6 +139,7 @@
     <Compile Include="Services\PlaytimeService.cs" />
     <Compile Include="Services\DonationBypassService.cs" />
     <Compile Include="Services\ChatFeaturesService.cs" />
+    <Compile Include="Services\DeathLocationService.cs" />
     <Compile Include="Services\ItemFeaturesService.cs" />
     <Compile Include="Services\PrivateMessageService.cs" />
     <Compile Include="Services\VoteService.cs" />

@@ -53,6 +53,7 @@ namespace CCRPPlugin
         public string DataDirectory { get; private set; }
 
         public DonationBypassService DonationBypassService { get; private set; }
+        public DeathLocationService DeathLocationService { get; private set; }
 
         public List<DutyGroups> ValidGroups;
         private readonly Dictionary<ushort, List<string>> giveItemBypassPermissions = new Dictionary<ushort, List<string>>();
@@ -90,6 +91,7 @@ namespace CCRPPlugin
             VehicleCleanupService = gameObject.AddComponent<VehicleCleanupService>();
             WreckService = gameObject.AddComponent<WreckService>();
             TeleportService.Initialize(this);
+            DeathLocationService = CCRP_Plugin.Services.DeathLocationService.Initialize(this);
             CCRPFreezeManager.Initialize(gameObject);
             TeleportService.IsTeleportBlocked = CCRPFreezeManager.IsFrozen;
             ChatFeaturesService.Initialize(
@@ -787,6 +789,8 @@ namespace CCRPPlugin
             Destroy(PlaytimeService);
             Destroy(VehicleCleanupService);
             Destroy(WreckService);
+            CCRP_Plugin.Services.DeathLocationService.Shutdown(DeathLocationService);
+            DeathLocationService = null;
             CCRPFreezeManager.Shutdown();
             TeleportService.Unload();
             ChatFeaturesService.Shutdown();
