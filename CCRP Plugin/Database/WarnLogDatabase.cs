@@ -16,7 +16,7 @@ namespace CCRP_Plugin.Database
 
         public WarnLogDatabase()
         {
-            DataStorage = new DataStorage<List<WarnLog>>(Main.Instance.Directory, "WarnLog.json");
+            DataStorage = new DataStorage<List<WarnLog>>(Main.Instance.DataDirectory, "WarnLog.json");
         }
 
         public void Reload()

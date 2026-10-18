@@ -6,43 +6,98 @@ Command and Permission reference for CCRP plugin.
 
 | Command | Description | Permission |
 |---|---|---|
-| `/ban <name> <reason>` | Permanently bans a player. This is the same as Temp ban just without the duration. | `ccrp.ban` |
-| `/ban <name> <reason> <duration>` | Temporarily bans a player. Duration uses an integer followed by `m`, `h`, or `d`, such as `30m` or `2d`. | `ccrp.ban` |
-| `/blacklist add <give\|pickup\|both\|vehicle> <id> <bypass-permission>` | Adds an item or vehicle to the selected blacklist in `Blacklists.json`. | `ccrp.blacklist.manage` |
-| `/blacklist remove <give\|pickup\|both\|vehicle> <id>` | Removes an item or vehicle from the selected blacklist. | `ccrp.blacklist.manage` |
-| `/duty` | Toggles duty status for the first configured duty group the player has permission to use. | `ccrp.duty` and a configured duty-group permission |
-| `/editor` | Toggles the in-game object editor (F6). Requires freecam permission aswell. | `CCRPbuild.editor` |
-| `/freecam` | Toggles freecam and camera controls (F1-F5). | `CCRPbuild.freecam` |
-| `/god [name]` | Toggles Godmode for yourself or, with the additional permission, another online player. | `ccrp.god`; `ccrp.god.others` for another player |
+| `/ban <name> <reason>` | Permanently bans a player. | `ccrp.ban` |
+| `/ban <name> <reason> <duration>` | Temporarily bans a player (`30m`, `2h`, `1d`). | `ccrp.ban` |
+| `/blacklist add <give\|pickup\|both\|vehicle> <id> <bypass-permission>` | Adds an item or vehicle blacklist entry. | `ccrp.blacklist.manage` |
+| `/blacklist remove <give\|pickup\|both\|vehicle> <id>` | Removes a blacklist entry. | `ccrp.blacklist.manage` |
+| `/clear [-i] [-ev]` | Clears dropped items (`-i`; default) and/or empty vehicles (`-ev`). | `ccrp.clear` |
+| `/clearinventory [player]` (`/clearinv`) | Clears your or a player's inventory, including worn items. | `ccrp.clearinventory` |
+| `/duty` | Toggles your configured staff duty group. | `ccrp.duty` and a configured duty-group permission |
+| `/editor` | Toggles the F6 object editor. | `CCRPbuild.editor` |
+| `/ck <entry\|yes\|no> [arguments]` | Starts a configured vote or casts a ballot. Some votes also require `ccrp.ck.<alias-or-name>`. | `ccrp.ck` |
+| `/firemode <safety\|semi\|auto\|burst>` | Changes the held gun's firemode. | `ccrp.firemode` |
+| `/freecam` | Toggles freecam controls (F1-F5). | `CCRPbuild.freecam` |
+| `/freeze [player]` | Freezes a player until unfrozen or either party disconnects. | `ccrp.freeze` |
+| `/god [name]` | Toggles Godmode for you or another player. | `ccrp.god`; `ccrp.god.others` for another player |
 | `/delhome <name>` | Deletes one of your homes. | `ccrp.delhome` |
-| `/home <name>` | Teleports you to one of your homes after a delay. Moving cancels it. | `ccrp.home` (5 second delay) or `ccrp.home.<n>` for an `<n>` second delay (0-300, 0 = instant; lowest held wins) |
-| `/homes` | Lists your homes and your home limit. | `ccrp.homes` |
-| `/sethome <name>` | Saves your position as a home. Reusing a name moves that home. Limit is per player. | `ccrp.sethome` (1 home) or `ccrp.sethome.<n>` for up to `<n>` homes (1-100; highest held wins) |
-| `/i <id-or-name> [amount]` (`/give`) | Gives an item by ID or name. Item blacklist rules and amount permissions apply. | `ccrp.i`; `ccrp.i.<n>` for the maximum amount, where `<n>` is 1-25 |
-| `/inv <name\|Steam64>` | Opens a view-only snapshot of all of an online player's items (hands, backpack, vest, shirt, pants) in your storage window. Edits don't change the target's inventory; items taken from the snapshot are removed from you again. Cannot target yourself. | `ccrp.inv` |
+| `/delwarp <name>` | Deletes a shared warp. | `ccrp.delwarp` |
+| `/home <name>` | Teleports to a home; moving cancels the delay. | `ccrp.home` (5s) or `ccrp.home.<n>` (0-300s; lowest applies) |
+| `/homes` | Lists your homes and limit. | `ccrp.homes` |
+| `/if <autoreload\|autorepair\|all> <on\|off>` (`/itemfeatures`) | Toggles features for the held item. | `ccrp.itemfeatures` |
+| `/sethome <name>` | Saves or updates a home. | `ccrp.sethome` (1 home) or `ccrp.sethome.<n>` (1-100; highest applies) |
+| `/i <id-or-name> [amount]` (`/give`) | Gives an item, subject to blacklist and amount limits. | `ccrp.i`; `ccrp.i.<n>` (maximum amount, up to 25) |
+| `/inv <name\|Steam64>` | Opens a read-only inventory snapshot of an online player. | `ccrp.inv` |
+| `/jump` | Teleports to the point you're looking at (up to 100m). | `ccrp.jump` |
+| `/kill [player]` | Kills you or an online player. | `ccrp.kill` |
 | `/kick <name> <reason>` | Kicks an online player. | `ccrp.kick` |
-| `/playtime [name]` | Shows your playtime, or the playtime of an online player. | `ccrp.playtime` |
-| `/removewarn <name> <reason>` | Removes one warning from an online player. | `ccrp.removewarn` |
-| `/spectate` | Toggles visibility of player names on the map and above players (F7). | `CCRPbuild.spectate` |
-| `/teleport <player-or-location>` | Teleports you to an online player or named map location. Alias: `/tp`. | `ccrp.teleport` |
-| `/teleport <x> <y> <z>` | Teleports you to coordinates. | `ccrp.teleport` |
-| `/tphere <name>` | Teleports an online player to you. | `ccrp.tphere` |
+| `/msg <player> <message>` (`/tell`, `/pm`) | Sends a private message. | `ccrp.tell` |
+| `/openstorage` | Opens the storage you are looking at. | `ccrp.openstorage` |
+| `/opendoor` | Opens the door you are looking at. | `ccrp.opendoor` |
+| `/playtime [name]` | Shows your or another player's playtime. | `ccrp.playtime` |
+| `/r <message>` (`/reply`) | Replies to your latest private message. | `ccrp.reply` |
+| `/refuelgenerator <radius>` | Refuels nearby generators (max 500m). | `ccrp.refuelgenerator` |
+| `/refuelvehicle` | Refuels your current vehicle. | `ccrp.refuelvehicle` |
+| `/repairvehicle` | Repairs your current vehicle. | `ccrp.repairvehicle` |
+| `/removewarn <name> <reason>` | Removes a warning. | `ccrp.removewarn` |
+| `/setattachment [id\|name]` | Sets or clears a held gun's attachments. | `ccrp.setattachment` |
+| `/speed [speed]` | Sets run speed (0-10; default 1). | `ccrp.speed` |
+| `/spectate` | Toggles player markers (F7). | `CCRPbuild.spectate` |
+| `/spypm` | Toggles private-message monitoring. | `ccrp.spypm` |
+| `/sudo <player\|*\|*console*> <command>` | Runs a command as a player, everyone, or console. | `ccrp.sudo` |
+| `/teleport <player-or-location>` (`/tp`) | Teleports to a player or map location. | `ccrp.teleport` |
+| `/teleport <x> <y> <z>` | Teleports to coordinates. | `ccrp.teleport` |
+| `/tpa <player\|accept\|deny\|cancel>` | Sends or manages teleport requests (expire in 60s; teleport after 5s, cancelled by movement). | `ccrp.tpa` |
+| `/tphere <name>` | Teleports a player to you. | `ccrp.tphere` |
+| `/unfreeze [player]` | Unfreezes a player or yourself. | `ccrp.unfreeze` |
+| `/warp <name>` | Teleports to a shared warp (5s; movement cancels). | `ccrp.warp` |
+| `/setwarp <name>` | Creates or updates a shared warp. | `ccrp.setwarp` |
+| `/warps` | Lists shared warps. | `ccrp.warps` |
 | `/unban <Steam64ID> <reason>` | Unbans a Steam account. | `ccrp.unban` |
-| `/v <id-or-name>` (`/vehicle`) | Spawns a vehicle by ID or name. Vehicle blacklist bypass rules apply. Players without the bypass also cannot take the driver seat of blacklisted vehicles (passenger seats stay open once the driver seat is occupied). | `ccrp.v` |
-| `/vanish [name]` | Toggles Vanish for yourself or, with the additional permission, another online player. | `ccrp.vanish`; `ccrp.vanish.others` for another player |
-| `/warn <name> <reason>` | Adds a warning to an online player. Configured warning thresholds can kick or ban the player. | `ccrp.warn` |
-| `/warns [name]` | Shows your warning count and latest active warning reason, or another online player's with the additional permission. | `ccrp.warns`; `ccrp.warns.other` for another player |
+| `/v <id-or-name>` (`/vehicle`) | Spawns a vehicle, subject to blacklist rules. | `ccrp.v` |
+| `/vehfeatures <autorefuel\|autorepair\|all> <on\|off>` (`/vehiclefeatures`, `/vf`) | Toggles features for your current vehicle. | `ccrp.vehiclefeatures` |
+| `/vanish [name]` | Toggles your or another player's vanish. | `ccrp.vanish`; `ccrp.vanish.others` for another player |
+| `/warn <name> <reason>` | Warns an online player. | `ccrp.warn` |
+| `/warns [name]` | Shows your warnings or another player's. | `ccrp.warns`; `ccrp.warns.other` for another player |
+| `/wreck scan <filter\|itemID> <radius> [username\|Steam64]` | Counts matching structures, barricades and vehicles without removing them. Use an exact asset ID to scan by ID. | `ccrp.wreck` |
 
 ## Permission Notes
 
+- Plugin-owned JSON files are stored in the plugin's `Data` folder. On its first startup after this update, existing top-level `.json` files are copied there only when the matching destination file does not already exist; the originals are retained as backups.
 - To let `/give` grant amounts greater than one, grant the caller the appropriate `ccrp.i.<n>` permission. The number is the maximum amount allowed by that permission, up to 25.
 - Homes are stored per player in `Homes.json`. A player needs only one of `ccrp.sethome` or `ccrp.sethome.<n>` to use `/sethome`, and only one of `ccrp.home` or `ccrp.home.<n>` to use `/home`.
 - Rocket.Unturned has its own built-in `/home` (bed teleport). If it takes precedence on your server, disable it with `<Command Name="home" Enabled="false" />` in `Rocket\Commands.config.xml`.
-- `CCRPbuild.editor` enables the editor but does not grant permission to move other players' objects. Grant Unturned's `admin.editor.otherobjects` separately if that is intended.
+- `CCRPbuild.editor` (with `CCRPbuild.freecam`) enables the editor, but the plugin only lets players move barricades and structures they own. Moving another player's buildables, or any buildable that can't be resolved, is denied and resets the requested transform to the buildable's current server-side position and rotation unless the player's effective Rocket permissions include the exact `admin.editor.otherobjects` grant. Rocket's automatic admin or wildcard permission result alone does not grant this override.
 - Blacklists (give, pickup, both, and vehicle) are only bypassed by the entry's exact bypass permission or by `ccrp.bypass.all`. Admin/blue hammer status and the `*` wildcard do not bypass them. `ccrp.bypass.all` bypasses every item and vehicle blacklist.
 - Warning thresholds, actions, durations, and reasons are configurable in the `<Warnings>` section of `CCRP Plugin.configuration.xml`.
 - The `/blacklist` command changes are saved to `Blacklists.json` and apply immediately.
 - Max skills: set `<MaxSkills Enabled="true">` in `CCRP Plugin.configuration.xml` to max all skills when a player joins or respawns. List skills to leave alone under `<IgnoredSkills>` as `<Skill>NAME</Skill>` entries (case-insensitive game names such as `OVERKILL`, `CARDIO`, `CRAFTING`, `ENGINEER`).
+- Item and vehicle automation is scoped to the exact held item or spawned vehicle and does not persist across restarts. It does not consume fuel, repair items or magazines.
+- Votes and private-message formatting are configured in `CCRP Plugin.configuration.xml`. A vote with `RequirePermission="true"` additionally requires `ccrp.ck.<alias-or-name>`; false lets anyone with `/ck` access start that vote.
+- Example vote and private-message configuration:
+
+```xml
+<PrivateMessages Enabled="true">
+  <FormatFrom>(From {0}): {1}</FormatFrom>
+  <FormatTo>(To {0}): {1}</FormatTo>
+  <FormatSpy>&lt;gray&gt;Spy: {0} -&gt; {1}: {2}</FormatSpy>
+  <ConsoleDisplayName>*console*</ConsoleDisplayName>
+</PrivateMessages>
+<Votes Enabled="true">
+  <Vote Name="Day" Alias="d" Command="/day" MinimumArguments="0" Color="#fff333" Icon=""
+        Enabled="true" MinimumPlayers="1" RequiredPercent="50" Timer="60"
+        CooldownTime="600" RequirePermission="false" />
+</Votes>
+```
+- The auto-announcer sends one non-empty `<Message>` per interval, rotates through the list and saves its `LastIndex` in the plugin configuration. Example:
+
+```xml
+<AutoAnnouncer Enabled="true" Interval="720" LastIndex="0">
+  <Message>
+    <Text>Welcome to the server!</Text>
+    <Icon></Icon>
+  </Message>
+</AutoAnnouncer>
+```
 
 ## Donation Bypasses
 

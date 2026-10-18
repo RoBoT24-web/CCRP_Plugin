@@ -13,7 +13,7 @@ namespace CCRPPlugin.Database
 
         public WarnDatabase()
         {
-            DataStorage = new DataStorage<List<Warns>>(Main.Instance.Directory, "Warns.json");
+            DataStorage = new DataStorage<List<Warns>>(Main.Instance.DataDirectory, "Warns.json");
         }
 
         public void Reload()

@@ -10,6 +10,7 @@ namespace CCRPPlugin.Storage
 
         public DataStorage(string dir, string fileName, Formatting formatting = Formatting.Indented)
         {
+            Directory.CreateDirectory(dir);
             DataPath = Path.Combine(dir, fileName);
             this.formatting = formatting;
         }

@@ -22,7 +22,7 @@ namespace CCRPPlugin.Commands
 
         public string Help => "Queue nearby structures, barricades, or vehicles for destruction.";
 
-        public string Syntax => "<filter> <radius> [username|Steam64] | scan <filter> <radius> [username|Steam64] | confirm <reason> | abort";
+        public string Syntax => "<filter> <radius> [username|Steam64] | scan <filter|itemID> <radius> [username|Steam64] | confirm <reason> | abort";
 
         public List<string> Aliases => new List<string>();
 
@@ -121,6 +121,8 @@ namespace CCRPPlugin.Commands
 
             HashSet<char> categories;
             HashSet<ushort> itemIds = null;
+            bool itemIdScan = false;
+            ushort scanItemId = 0;
             int radiusIndex;
             if (itemCommand)
             {
@@ -134,7 +136,12 @@ namespace CCRPPlugin.Commands
             }
             else
             {
-                if (!TryParseCategories(command[filterIndex], out categories))
+                if (scan && TryParseItemId(command[filterIndex], out scanItemId))
+                {
+                    categories = null;
+                    itemIdScan = true;
+                }
+                else if (!TryParseCategories(command[filterIndex], out categories))
                 {
                     UnturnedChat.Say(caller, Main.Instance.Translate("WreckInvalidFilter"), Main.Instance.MessageColor);
                     return;
@@ -170,7 +177,9 @@ namespace CCRPPlugin.Commands
             if (scan)
             {
                 int count;
-                bool withinLimit = Main.Instance.WreckService.TryScan(player.Position, radius, categories, ownerId, itemIds, out count);
+                bool withinLimit = itemIdScan
+                    ? Main.Instance.WreckService.TryScanByItemId(player.Position, radius, scanItemId, ownerId, out count)
+                    : Main.Instance.WreckService.TryScan(player.Position, radius, categories, ownerId, itemIds, out count);
                 if (!withinLimit)
                 {
                     UnturnedChat.Say(caller, Main.Instance.Translate("WreckTooMany", WreckService.MaximumTargets), Main.Instance.MessageColor);
@@ -289,6 +298,11 @@ namespace CCRPPlugin.Commands
             }
 
             return itemIds.Count > 0;
+        }
+
+        private static bool TryParseItemId(string value, out ushort itemId)
+        {
+            return ushort.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out itemId) && itemId != 0;
         }
     }
 }

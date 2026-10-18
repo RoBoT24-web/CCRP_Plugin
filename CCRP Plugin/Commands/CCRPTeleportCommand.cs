@@ -1,4 +1,5 @@
 ﻿using CCRPPlugin;
+using CCRP_Plugin.Services;
 using Rocket.API;
 using Rocket.Core.Logging;
 using Rocket.Unturned.Chat;
@@ -36,6 +37,10 @@ namespace CCRP_Plugin.Commands
         private void ExecuteCore(IRocketPlayer caller, string[] command)
         {
             UnturnedPlayer player = (UnturnedPlayer)caller;
+            if (TeleportService.IsBlocked(player))
+            {
+                return;
+            }
             switch (command.Length)
             {
                 case 1:

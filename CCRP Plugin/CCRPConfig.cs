@@ -1,4 +1,5 @@
 using Rocket.API;
+using CCRP_Plugin.Models;
 using System.Collections.Generic;
 using System.Xml;
 using System.Xml.Serialization;
@@ -29,7 +30,16 @@ namespace CCRPPlugin
         [XmlElement(Order = 6)]
         public MaxSkillsSettings MaxSkills { get; set; }
 
-        [XmlAnyElement(Order = 7)]
+        [XmlElement(Order = 7)]
+        public PrivateMessageSettings PrivateMessages { get; set; }
+
+        [XmlElement(Order = 8)]
+        public VoteSettings Votes { get; set; }
+
+        [XmlElement(Order = 9)]
+        public AutoAnnouncerSettings AutoAnnouncer { get; set; }
+
+        [XmlAnyElement(Order = 10)]
         public XmlElement[] LegacyElements { get; set; }
 
         [XmlIgnore]
@@ -78,6 +88,9 @@ namespace CCRPPlugin
             VehicleCleanup = new VehicleCleanupSettings();
             DonationBypasses = new DonationBypassSettings { DeniedPermissions = new List<string> { "bypass.invis" } };
             MaxSkills = new MaxSkillsSettings();
+            PrivateMessages = new PrivateMessageSettings();
+            Votes = new VoteSettings { Definitions = VoteSettings.CreateDefaults() };
+            AutoAnnouncer = new AutoAnnouncerSettings();
 
             Groups = new List<DutyGroups>()
             {

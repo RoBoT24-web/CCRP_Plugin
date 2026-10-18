@@ -33,7 +33,7 @@ namespace CCRP_Plugin.Database
 
         public HomeDatabase()
         {
-            DataStorage = new DataStorage<List<Home>>(Main.Instance.Directory, "Homes.json");
+            DataStorage = new DataStorage<List<Home>>(Main.Instance.DataDirectory, "Homes.json");
         }
 
         public void Reload()

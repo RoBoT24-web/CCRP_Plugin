@@ -17,7 +17,7 @@ namespace CCRP_Plugin.Database
 
         public PlayTimeDatabase()
         {
-            DataStorage = new DataStorage<List<Playtime>>(Main.Instance.Directory, "Playtime.json");
+            DataStorage = new DataStorage<List<Playtime>>(Main.Instance.DataDirectory, "Playtime.json");
         }
 
         public void Reload()

@@ -1,4 +1,5 @@
 ﻿using CCRPPlugin;
+using CCRP_Plugin.Services;
 using Rocket.API;
 using Rocket.Core.Logging;
 using Rocket.Unturned.Chat;
@@ -42,6 +43,10 @@ namespace CCRP_Plugin.Commands
                     {
                         UnturnedChat.Say(caller, Main.Instance.Translate("PlayerNotFound"), Main.Instance.MessageColor);
                         Logger.Log($"{caller.DisplayName} ({caller.Id}) didn't find a player (/tphere)!");
+                        return;
+                    }
+                    if (TeleportService.IsBlocked(callerPlayer) || TeleportService.IsBlocked(otherPlayer))
+                    {
                         return;
                     }
                     otherPlayer.Player.teleportToPlayer(callerPlayer.Player);

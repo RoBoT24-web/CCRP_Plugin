@@ -61,6 +61,17 @@ namespace CCRP_Plugin.Services
             return count <= MaximumTargets;
         }
 
+        public bool TryScanByItemId(Vector3 center, int radius, ushort itemId, ulong? ownerId, out int count)
+        {
+            return TryScan(
+                center,
+                radius,
+                new HashSet<char> { '*' },
+                ownerId,
+                new HashSet<ushort> { itemId },
+                out count);
+        }
+
         public void Queue(CSteamID caller, Vector3 center, int radius, HashSet<char> categories, ulong? ownerId, HashSet<ushort> itemIds, out int count, out bool replacedRequest)
         {
             ulong callerId = caller.m_SteamID;
@@ -276,7 +287,6 @@ namespace CCRP_Plugin.Services
 
                 List<Transform> barricadeTransforms = new List<Transform>();
                 BarricadeManager.getBarricadesInRadius(center, radiusSquared, regionCoordinates, barricadeTransforms);
-                BarricadeManager.getBarricadesInRadius(center, radiusSquared, barricadeTransforms);
                 foreach (Transform transform in barricadeTransforms)
                 {
                     if (transform == null || !seenTransforms.Add(transform) || (transform.position - center).sqrMagnitude > radiusSquared)

@@ -2,6 +2,7 @@ using CCRP_Plugin.Database;
 using CCRP_Plugin.Models;
 using CCRP_Plugin.Services;
 using CCRPPlugin.Database;
+using CCRPPlugin.Commands;
 using CCRPPlugin.Storage;
 using Rocket.API;
 using Rocket.API.Collections;
@@ -14,6 +15,7 @@ using Rocket.Unturned.Events;
 using Rocket.Unturned.Player;
 using SDG.Unturned;
 using Steamworks;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -48,6 +50,8 @@ namespace CCRPPlugin
 
         public CCRPConfig PluginConfiguration => Configuration.Instance;
 
+        public string DataDirectory { get; private set; }
+
         public DonationBypassService DonationBypassService { get; private set; }
 
         public List<DutyGroups> ValidGroups;
@@ -59,6 +63,7 @@ namespace CCRPPlugin
         protected override void Load()
         {
             Instance = this;
+            InitializeDataDirectory();
             NormalizeConfiguration();
 
             //Database
@@ -84,6 +89,13 @@ namespace CCRPPlugin
             PlaytimeService = gameObject.AddComponent<PlaytimeService>();
             VehicleCleanupService = gameObject.AddComponent<VehicleCleanupService>();
             WreckService = gameObject.AddComponent<WreckService>();
+            TeleportService.Initialize(this);
+            CCRPFreezeManager.Initialize(gameObject);
+            TeleportService.IsTeleportBlocked = CCRPFreezeManager.IsFrozen;
+            ChatFeaturesService.Initialize(
+                Configuration.Instance.PrivateMessages,
+                Configuration.Instance.Votes,
+                Configuration.Instance.AutoAnnouncer);
 
             //Valid Groups
             ValidGroups = Configuration.Instance.Groups;
@@ -106,6 +118,8 @@ namespace CCRPPlugin
             ItemManager.onTakeItemRequested += OnTakeItemRequested;
             VehicleManager.onEnterVehicleRequested += OnEnterVehicleRequested;
             VehicleManager.onSwapSeatRequested += OnSwapSeatRequested;
+            BarricadeManager.onTransformRequested += OnBarricadeTransformRequested;
+            StructureManager.onTransformRequested += OnStructureTransformRequested;
 
             //Color Chat Msg
             MessageColor = UnturnedChat.GetColorFromName(Configuration.Instance.MessageColor, UnityEngine.Color.cyan);
@@ -151,6 +165,57 @@ namespace CCRPPlugin
             Logger.Log("==========================");
         }
 
+        private void InitializeDataDirectory()
+        {
+            DataDirectory = Path.Combine(Directory, "Data");
+            System.IO.Directory.CreateDirectory(DataDirectory);
+            string migrationMarker = Path.Combine(DataDirectory, ".legacy-json-migrated");
+            if (File.Exists(migrationMarker))
+            {
+                return;
+            }
+
+            foreach (string sourcePath in System.IO.Directory.GetFiles(Directory, "*.json", SearchOption.TopDirectoryOnly))
+            {
+                string destinationPath = Path.Combine(DataDirectory, Path.GetFileName(sourcePath));
+                if (File.Exists(destinationPath))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    File.Copy(sourcePath, destinationPath, false);
+                    Logger.Log($"Migrated plugin data file {Path.GetFileName(sourcePath)} to the Data folder. The original was retained.");
+                }
+                catch (IOException exception)
+                {
+                    Logger.LogError($"Failed to migrate plugin data file {Path.GetFileName(sourcePath)}: {exception.Message}");
+                    throw;
+                }
+                catch (UnauthorizedAccessException exception)
+                {
+                    Logger.LogError($"Insufficient access to migrate plugin data file {Path.GetFileName(sourcePath)}: {exception.Message}");
+                    throw;
+                }
+            }
+
+            try
+            {
+                File.WriteAllText(migrationMarker, string.Empty);
+            }
+            catch (IOException exception)
+            {
+                Logger.LogError("Failed to mark the legacy JSON migration as complete: " + exception.Message);
+                throw;
+            }
+            catch (UnauthorizedAccessException exception)
+            {
+                Logger.LogError("Insufficient access to mark the legacy JSON migration as complete: " + exception.Message);
+                throw;
+            }
+        }
+
         private void NormalizeConfiguration()
         {
             if (Configuration.Instance.Warnings == null)
@@ -185,6 +250,22 @@ namespace CCRPPlugin
             if (Configuration.Instance.MaxSkills.IgnoredSkills == null)
             {
                 Configuration.Instance.MaxSkills.IgnoredSkills = new List<string>();
+            }
+            if (Configuration.Instance.PrivateMessages == null)
+            {
+                Configuration.Instance.PrivateMessages = new PrivateMessageSettings();
+            }
+            if (Configuration.Instance.Votes == null)
+            {
+                Configuration.Instance.Votes = new VoteSettings { Definitions = VoteSettings.CreateDefaults() };
+            }
+            else if (Configuration.Instance.Votes.Definitions == null)
+            {
+                Configuration.Instance.Votes.Definitions = VoteSettings.CreateDefaults();
+            }
+            if (Configuration.Instance.AutoAnnouncer == null)
+            {
+                Configuration.Instance.AutoAnnouncer = new AutoAnnouncerSettings();
             }
             if (Configuration.Instance.DonationBypasses == null)
             {
@@ -349,7 +430,7 @@ namespace CCRPPlugin
 
         private void LoadBlacklists()
         {
-            blacklistStorage = new DataStorage<BlacklistSettings>(Directory, "Blacklists.json", Newtonsoft.Json.Formatting.Indented);
+            blacklistStorage = new DataStorage<BlacklistSettings>(DataDirectory, "Blacklists.json", Newtonsoft.Json.Formatting.Indented);
             bool needsSave = false;
             try
             {
@@ -706,6 +787,9 @@ namespace CCRPPlugin
             Destroy(PlaytimeService);
             Destroy(VehicleCleanupService);
             Destroy(WreckService);
+            CCRPFreezeManager.Shutdown();
+            TeleportService.Unload();
+            ChatFeaturesService.Shutdown();
 
             UnturnedPlayerEvents.OnPlayerRevive -= OnPlayerRevive;
             U.Events.OnPlayerConnected -= OnPlayerConnected;
@@ -713,8 +797,123 @@ namespace CCRPPlugin
             ItemManager.onTakeItemRequested -= OnTakeItemRequested;
             VehicleManager.onEnterVehicleRequested -= OnEnterVehicleRequested;
             VehicleManager.onSwapSeatRequested -= OnSwapSeatRequested;
+            BarricadeManager.onTransformRequested -= OnBarricadeTransformRequested;
+            StructureManager.onTransformRequested -= OnStructureTransformRequested;
 
             Rocket.Core.Logging.Logger.Log($"{Name} has been unloaded!");
+        }
+
+        // The base game lets any workzone-enabled player move any buildable, so ownership is enforced here.
+        private void OnBarricadeTransformRequested(CSteamID instigator, byte x, byte y, ushort plant, uint instanceID, ref UnityEngine.Vector3 point, ref byte angle_x, ref byte angle_y, ref byte angle_z, ref bool shouldAllow)
+        {
+            if (!shouldAllow)
+            {
+                return;
+            }
+
+            BarricadeRegion region;
+            BarricadeDrop target = null;
+            BarricadeData data = null;
+            if (BarricadeManager.tryGetRegion(x, y, plant, out region) && region != null && region.drops != null)
+            {
+                foreach (BarricadeDrop drop in region.drops)
+                {
+                    if (drop.instanceID == instanceID)
+                    {
+                        target = drop;
+                        data = drop.GetServersideData();
+                        break;
+                    }
+                }
+            }
+            if (!CanEditBuildable(instigator, data != null, data != null ? data.owner : 0))
+            {
+                shouldAllow = false;
+                if (target != null && target.model != null)
+                {
+                    RestoreTransform(target.model, ref point, ref angle_x, ref angle_y, ref angle_z);
+                }
+            }
+        }
+
+        private void OnStructureTransformRequested(CSteamID instigator, byte x, byte y, uint instanceID, ref UnityEngine.Vector3 point, ref byte angle_x, ref byte angle_y, ref byte angle_z, ref bool shouldAllow)
+        {
+            if (!shouldAllow)
+            {
+                return;
+            }
+
+            StructureDrop target = null;
+            StructureData data = null;
+            foreach (StructureRegion region in StructureManager.regions)
+            {
+                if (region == null || region.drops == null)
+                {
+                    continue;
+                }
+
+                foreach (StructureDrop drop in region.drops)
+                {
+                    if (drop.instanceID != instanceID)
+                    {
+                        continue;
+                    }
+
+                    target = drop;
+                    data = drop.GetServersideData();
+                    break;
+                }
+
+                if (data != null)
+                {
+                    break;
+                }
+            }
+            if (!CanEditBuildable(instigator, data != null, data != null ? data.owner : 0))
+            {
+                shouldAllow = false;
+                if (target != null && target.model != null)
+                {
+                    RestoreTransform(target.model, ref point, ref angle_x, ref angle_y, ref angle_z);
+                }
+            }
+        }
+
+        private static void RestoreTransform(UnityEngine.Transform target, ref UnityEngine.Vector3 point, ref byte angle_x, ref byte angle_y, ref byte angle_z)
+        {
+            point = target.position;
+            UnityEngine.Vector3 eulerAngles = target.rotation.eulerAngles;
+            angle_x = MeasurementTool.angleToByte(UnityEngine.Mathf.RoundToInt(eulerAngles.x / 2f) * 2);
+            angle_y = MeasurementTool.angleToByte(UnityEngine.Mathf.RoundToInt(eulerAngles.y / 2f) * 2);
+            angle_z = MeasurementTool.angleToByte(UnityEngine.Mathf.RoundToInt(eulerAngles.z / 2f) * 2);
+        }
+
+        // Fails closed when the buildable cannot be resolved. admin.editor.otherobjects is the explicit override.
+        private bool CanEditBuildable(CSteamID instigator, bool found, ulong owner)
+        {
+            if (found && owner == instigator.m_SteamID)
+            {
+                return true;
+            }
+
+            UnturnedPlayer editor = UnturnedPlayer.FromCSteamID(instigator);
+            if (editor != null && HasExplicitPermission(editor, "admin.editor.otherobjects"))
+            {
+                return true;
+            }
+
+            if (editor != null)
+            {
+                UnturnedChat.Say(editor, Translate("EditorOtherObjectsDenied"), MessageColor);
+            }
+            return false;
+        }
+
+        private static bool HasExplicitPermission(UnturnedPlayer player, string permission)
+        {
+            List<Permission> permissions = R.Permissions.GetPermissions(player);
+            return permissions != null && permissions.Any(grant =>
+                grant != null && string.Equals(grant.Name, permission, StringComparison.OrdinalIgnoreCase));
         }
 
         // Entering seats are assigned in order, so a free driver seat means this player would become the driver.
@@ -941,9 +1140,14 @@ namespace CCRPPlugin
             { "FreecamEnabled", "You have enabled freecam!" },
             { "FreecamDisabled", "You have disabled freecam!" },
             { "FreecamSyntax", "Please use /freecam without arguments." },
+            { "FiremodeSyntax", "Please use /firemode <safety|semi|auto|burst>." },
+            { "FiremodeNoGun", "You must be holding a gun to change its firemode." },
+            { "FiremodeUnavailable", "The firemode could not be changed right now. Try again when the gun is ready." },
+            { "FiremodeSet", "Your held gun is now set to {0} firemode." },
             { "EditorEnabled", "You have enabled the object editor!" },
             { "EditorDisabled", "You have disabled the object editor!" },
             { "EditorSyntax", "Please use /editor without arguments." },
+            { "EditorOtherObjectsDenied", "You can only edit your own builds." },
             { "SpectateEnabled", "You have enabled player name and map visibility!" },
             { "SpectateDisabled", "You have disabled player name and map visibility!" },
             { "SpectateSyntax", "Please use /spectate without arguments." },

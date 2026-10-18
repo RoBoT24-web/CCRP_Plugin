@@ -31,7 +31,7 @@ namespace CCRP_Plugin.Services
         public DonationBypassService(Main plugin)
         {
             this.plugin = plugin;
-            registryStorage = new DataStorage<BypassGroupRegistry>(plugin.Directory, "DonationBypassGroups.json", Newtonsoft.Json.Formatting.Indented);
+            registryStorage = new DataStorage<BypassGroupRegistry>(plugin.DataDirectory, "DonationBypassGroups.json", Newtonsoft.Json.Formatting.Indented);
 
             try
             {

@@ -1,4 +1,5 @@
 using CCRP_Plugin.Models;
+using CCRP_Plugin.Services;
 using CCRPPlugin;
 using Rocket.API;
 using Rocket.Unturned;
@@ -68,6 +69,10 @@ namespace CCRP_Plugin.Commands
             }
 
             UnturnedPlayer player = (UnturnedPlayer)caller;
+            if (TeleportService.IsBlocked(player))
+            {
+                return;
+            }
             ulong steamId = player.CSteamID.m_SteamID;
             Home home = Main.Instance.HomeDatabase.GetHome(steamId, command[0]);
             if (home == null)
@@ -114,6 +119,11 @@ namespace CCRP_Plugin.Commands
                     Pending.Remove(steamId);
                     yield break;
                 }
+                if (TeleportService.IsBlocked(player))
+                {
+                    Pending.Remove(steamId);
+                    yield break;
+                }
 
                 if ((player.Position - start).sqrMagnitude > MoveCancelDistance * MoveCancelDistance)
                 {
@@ -129,6 +139,10 @@ namespace CCRP_Plugin.Commands
 
         private static void TeleportHome(UnturnedPlayer player, Home home)
         {
+            if (TeleportService.IsBlocked(player))
+            {
+                return;
+            }
             player.Teleport(new Vector3(home.X, home.Y + 0.5f, home.Z), home.Rotation);
             UnturnedChat.Say(player, Main.Instance.Translate("HomeTeleported", home.Name), Main.Instance.MessageColor);
         }
