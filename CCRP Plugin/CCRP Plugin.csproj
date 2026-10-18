@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{D3C08508-108D-4437-941E-4DAC49B5A601}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <RootNamespace>CCRP_Plugin</RootNamespace>
+    <AssemblyName>CCRP Plugin</AssemblyName>
+    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup>
+    <StartupObject />
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Assembly-CSharp, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>libraries\Assembly-CSharp.dll</HintPath>
+    </Reference>
+    <Reference Include="com.rlabrecque.steamworks.net">
+      <HintPath>libraries\com.rlabrecque.steamworks.net.dll</HintPath>
+    </Reference>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>libraries\Newtonsoft.Json.dll</HintPath>
+    </Reference>
+    <Reference Include="Rocket.API, Version=4.9.3.4, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>libraries\Rocket.API.dll</HintPath>
+    </Reference>
+    <Reference Include="Rocket.Core, Version=4.9.3.4, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>libraries\Rocket.Core.dll</HintPath>
+    </Reference>
+    <Reference Include="Rocket.Unturned, Version=4.9.3.13, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>libraries\Rocket.Unturned.dll</HintPath>
+    </Reference>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Deployment" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Xml" />
+    <Reference Include="UnityEngine">
+      <HintPath>libraries\UnityEngine.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>libraries\UnityEngine.CoreModule.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="CCRPConfig.cs" />
+    <Compile Include="Commands\CCRPBanCommand.cs" />
+    <Compile Include="Commands\CCRPBlacklistCommand.cs" />
+    <Compile Include="Commands\CCRPBypassGroupCommand.cs" />
+    <Compile Include="Commands\CCRPBypassItemCommand.cs" />
+    <Compile Include="Commands\CCRPBypassVehicleCommand.cs" />
+    <Compile Include="Commands\CCRPBypassesCommand.cs" />
+    <Compile Include="Commands\CCRPBypassAdminCommand.cs" />
+    <Compile Include="Commands\CommandExceptionHandler.cs" />
+    <Compile Include="Commands\CCRPFreecamCommand.cs" />
+    <Compile Include="Commands\CCRPBuildEditorCommand.cs" />
+    <Compile Include="Commands\CCRPBuildSpectateCommand.cs" />
+    <Compile Include="Commands\CCRPDutyCommand.cs" />
+    <Compile Include="Commands\CCRPGiveCommand.cs" />
+    <Compile Include="Commands\CCRPGodCommand.cs" />
+    <Compile Include="Commands\CCRPInvCommand.cs" />
+    <Compile Include="Commands\CCRPKickCommand.cs" />
+    <Compile Include="Commands\CCRPPlayTimeCommand.cs" />
+    <Compile Include="Commands\CCRPRemoveWarnCommand.cs" />
+    <Compile Include="Commands\CCRPTeleportCommand.cs" />
+    <Compile Include="Commands\CCRPTphereCommand.cs" />
+    <Compile Include="Commands\CCRPUnbanCommand.cs" />
+    <Compile Include="Commands\CCRPVanishCommand.cs" />
+    <Compile Include="Commands\CCRPVehicleCommand.cs" />
+    <Compile Include="Commands\CCRPWarnCommand.cs" />
+    <Compile Include="Commands\CCRPWarnsCommand.cs" />
+    <Compile Include="Commands\CCRPWhoisCommand.cs" />
+    <Compile Include="Commands\CCRPWreckCommand.cs" />
+    <Compile Include="Commands\CCRPWreckItemCommand.cs" />
+    <Compile Include="Commands\CCRPWreckVehicleCommand.cs" />
+    <Compile Include="Commands\CCRPWreckBuildableCommand.cs" />
+    <Compile Include="Database\PlayTimeDatabase.cs" />
+    <Compile Include="Database\WarnDatabase.cs" />
+    <Compile Include="Database\WarnLogDatabase.cs" />
+    <Compile Include="DiscordWebhooks.cs" />
+    <Compile Include="Models\GiveSoftBlacklist.cs" />
+    <Compile Include="Models\BlacklistSettings.cs" />
+    <Compile Include="Models\BypassGroupRegistry.cs" />
+    <Compile Include="Models\Playtime.cs" />
+    <Compile Include="Models\VehicleSpawnBlacklist.cs" />
+    <Compile Include="Services\MaxSkillsService.cs" />
+    <Compile Include="Services\PlaytimeService.cs" />
+    <Compile Include="Services\DonationBypassService.cs" />
+    <Compile Include="Services\WarnLogService.cs" />
+    <Compile Include="Services\VehicleCleanupService.cs" />
+    <Compile Include="Services\WreckService.cs" />
+    <Compile Include="Models\WarnLog.cs" />
+    <Compile Include="Models\Warns.cs" />
+    <Compile Include="Main.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Services\WarnService.cs" />
+    <Compile Include="Storage\DataStorage.cs" />
+    <EmbeddedResource Include="Properties\Resources.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+    <Compile Include="Properties\Resources.Designer.cs">
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Resources.resx</DependentUpon>
+    </Compile>
+    <None Include="Properties\Settings.settings">
+      <Generator>SettingsSingleFileGenerator</Generator>
+      <LastGenOutput>Settings.Designer.cs</LastGenOutput>
+    </None>
+    <Compile Include="Properties\Settings.Designer.cs">
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Settings.settings</DependentUpon>
+      <DesignTimeSharedInput>True</DesignTimeSharedInput>
+    </Compile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="App.config" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+</Project>
