@@ -4,7 +4,6 @@ using Rocket.Core.Logging;
 using Rocket.Unturned.Chat;
 using Rocket.Unturned.Player;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace CCRPPlugin.Commands
 {
@@ -12,7 +11,7 @@ namespace CCRPPlugin.Commands
     {
         public AllowedCaller AllowedCaller => AllowedCaller.Player;
         public string Name => "bypasses";
-        public string Help => "Show your claimed item and vehicle bypasses.";
+        public string Help => "Show your bypass usage and claimed item and vehicle bypasses.";
         public string Syntax => string.Empty;
         public List<string> Aliases => new List<string> { "bypasslist" };
         public List<string> Permissions => new List<string> { "ccrp.bypass.shop" };
@@ -44,18 +43,37 @@ namespace CCRPPlugin.Commands
                 return "Failed: " + error;
             }
 
+            long donorUsed;
+            long donorMaximum;
+            int paidUsed;
+            int paidMaximum;
+            if (!Main.Instance.DonationBypassService.TryGetPlayerBypassUsage(
+                player,
+                out donorUsed,
+                out donorMaximum,
+                out paidUsed,
+                out paidMaximum,
+                out errorKey))
+            {
+                string error = Main.Instance.Translate(errorKey);
+                UnturnedChat.Say(caller, error, Main.Instance.MessageColor);
+                return "Failed: " + error;
+            }
+
+            string usageMessage = Main.Instance.Translate("BypassesUsage", donorUsed, donorMaximum, paidUsed, paidMaximum);
+            UnturnedChat.Say(caller, usageMessage, Main.Instance.MessageColor);
             if (bypasses.Count == 0)
             {
                 string emptyMessage = Main.Instance.Translate("BypassesEmpty");
                 UnturnedChat.Say(caller, emptyMessage, Main.Instance.MessageColor);
-                Logger.Log($"{caller.DisplayName} ({caller.Id}) checked their bypasses; none claimed.");
-                return "Succeeded: " + emptyMessage;
+                Logger.Log($"{caller.DisplayName} ({caller.Id}) checked their bypasses: {donorUsed}/{donorMaximum} donor and {paidUsed}/{paidMaximum} paid used; none owned.");
+                return "Succeeded: " + usageMessage + " " + emptyMessage;
             }
 
             string message = Main.Instance.Translate("BypassesList", string.Join(", ", bypasses));
             UnturnedChat.Say(caller, message, Main.Instance.MessageColor);
-            Logger.Log($"{caller.DisplayName} ({caller.Id}) checked their bypasses: {string.Join(", ", bypasses)}.");
-            return "Succeeded: " + message;
+            Logger.Log($"{caller.DisplayName} ({caller.Id}) checked their bypasses: {donorUsed}/{donorMaximum} donor and {paidUsed}/{paidMaximum} paid used. {string.Join(", ", bypasses)}.");
+            return "Succeeded: " + usageMessage + " " + message;
         }
     }
 }

@@ -125,128 +125,6 @@ namespace CCRP_Plugin.Services
             }
         }
 
-        public bool TryCreateGroup(UnturnedPlayer player, string displayName, string color, out string errorKey)
-        {
-            errorKey = null;
-            if (!IsValidDisplayName(displayName))
-            {
-                errorKey = "BypassInvalidName";
-                return false;
-            }
-
-            if (!TryNormalizeColor(color, out color))
-            {
-                errorKey = "BypassInvalidColor";
-                return false;
-            }
-
-            DonationBypassTier tier = GetHighestTier(player);
-            if (tier == null)
-            {
-                errorKey = "BypassNoDonationTier";
-                return false;
-            }
-
-            if (WasCreated(player.Id) && IsShopCreated(player.Id))
-            {
-                RocketPermissionsGroup existingGroup = GetOwnedGroup(player, out errorKey);
-                if (existingGroup == null)
-                {
-                    return false;
-                }
-
-                string previousDisplayName = existingGroup.DisplayName;
-                string previousPrefix = existingGroup.Prefix;
-                string previousColor = existingGroup.Color;
-                string previousParentGroup = existingGroup.ParentGroup;
-                List<Permission> previousPermissions = new List<Permission>(existingGroup.Permissions);
-                AddPurchasedPermissions(player.Id, existingGroup.Permissions);
-                existingGroup.DisplayName = displayName.Trim();
-                existingGroup.Prefix = displayName.Trim();
-                existingGroup.Color = color;
-                existingGroup.ParentGroup = tier.GroupId;
-                if (!SaveGroup(existingGroup))
-                {
-                    existingGroup.DisplayName = previousDisplayName;
-                    existingGroup.Prefix = previousPrefix;
-                    existingGroup.Color = previousColor;
-                    existingGroup.ParentGroup = previousParentGroup;
-                    existingGroup.Permissions = previousPermissions;
-                    errorKey = "BypassGroupSaveFailed";
-                    return false;
-                }
-
-                registry.ShopCreatedPlayerIds.RemoveAll(id =>
-                    string.Equals(id, player.Id, StringComparison.OrdinalIgnoreCase));
-                if (!TrySaveRegistry())
-                {
-                    registry.ShopCreatedPlayerIds.Add(player.Id);
-                    existingGroup.DisplayName = previousDisplayName;
-                    existingGroup.Prefix = previousPrefix;
-                    existingGroup.Color = previousColor;
-                    existingGroup.ParentGroup = previousParentGroup;
-                    existingGroup.Permissions = previousPermissions;
-                    if (!SaveGroup(existingGroup))
-                    {
-                        Logger.LogError($"Could not roll back group metadata for {existingGroup.Id} after registry save failed.");
-                    }
-                    errorKey = "BypassGroupSaveFailed";
-                    return false;
-                }
-
-                return true;
-            }
-
-            if (WasCreated(player.Id) || R.Permissions.GetGroup(GetPersonalGroupId(player)) != null)
-            {
-                errorKey = "BypassGroupAlreadyCreated";
-                return false;
-            }
-
-            RocketPermissionsGroup group = new RocketPermissionsGroup
-            {
-                Id = GetPersonalGroupId(player),
-                DisplayName = displayName.Trim(),
-                Prefix = displayName.Trim(),
-                Color = color,
-                ParentGroup = tier.GroupId,
-                Members = new List<string> { player.Id },
-                Permissions = new List<Permission>()
-            };
-            AddPurchasedPermissions(player.Id, group.Permissions);
-
-            RocketPermissionsProviderResult result = R.Permissions.AddGroup(group);
-            if (result != RocketPermissionsProviderResult.Success)
-            {
-                Logger.LogError($"Could not create personal bypass group for {player.Id}: {result}.");
-                errorKey = "BypassGroupSaveFailed";
-                return false;
-            }
-
-            registry.CreatedPlayerIds.Add(player.Id);
-            if (!TrySaveRegistry())
-            {
-                registry.CreatedPlayerIds.Remove(player.Id);
-                try
-                {
-                    RocketPermissionsProviderResult deleteResult = R.Permissions.DeleteGroup(group.Id);
-                    if (deleteResult != RocketPermissionsProviderResult.Success)
-                    {
-                        Logger.LogError($"Could not roll back personal bypass group {group.Id} after registry save failed: {deleteResult}.");
-                    }
-                }
-                catch (Exception exception)
-                {
-                    Logger.LogError($"Could not roll back personal bypass group {group.Id} after registry save failed: {exception.Message}");
-                }
-
-                errorKey = "BypassGroupSaveFailed";
-                return false;
-            }
-
-            return true;
-        }
-
         public bool TrySetGroupName(UnturnedPlayer player, string displayName, out string errorKey)
         {
             errorKey = null;
@@ -369,6 +247,63 @@ namespace CCRP_Plugin.Services
             }
 
             return TryClaim(player, entry.Bypass, BypassType.Vehicle, vehicleId, out errorKey);
+        }
+
+        public bool TryGetPlayerBypassUsage(
+            UnturnedPlayer player,
+            out long donorUsed,
+            out long donorMaximum,
+            out int paidUsed,
+            out int paidMaximum,
+            out string errorKey)
+        {
+            donorUsed = 0;
+            donorMaximum = 0;
+            paidUsed = 0;
+            paidMaximum = plugin.PluginConfiguration.DonationBypasses.MaxPaidBypasses;
+            errorKey = null;
+            if (player == null)
+            {
+                errorKey = "BypassesPlayerOnly";
+                return false;
+            }
+
+            List<DonationBypassTier> matchingTiers = GetMatchingTiers(player);
+            donorMaximum = matchingTiers.Sum(tier => (long)tier.MaxBypasses);
+
+            RocketPermissionsGroup personalGroup = null;
+            if (HasAnyPurchase(player.Id))
+            {
+                if (!TryGetOrCreateShopGroup(player, out personalGroup, out errorKey))
+                {
+                    return false;
+                }
+            }
+            else if (WasCreated(player.Id))
+            {
+                personalGroup = GetOwnedGroup(player, out errorKey);
+                if (personalGroup == null)
+                {
+                    return false;
+                }
+            }
+
+            HashSet<string> purchasedPermissions = GetPurchasedPermissions(player.Id);
+            paidUsed = purchasedPermissions.Count;
+            if (personalGroup != null && personalGroup.Permissions != null)
+            {
+                HashSet<string> knownBypassPermissions = GetKnownBypassPermissions();
+                donorUsed = personalGroup.Permissions
+                    .Where(permission => permission != null)
+                    .Select(permission => permission.Name)
+                    .Where(name => !string.IsNullOrWhiteSpace(name) &&
+                        knownBypassPermissions.Contains(name) &&
+                        !purchasedPermissions.Contains(name))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .LongCount();
+            }
+
+            return true;
         }
 
         public List<string> GetPlayerBypasses(UnturnedPlayer player, out string errorKey)
@@ -1334,9 +1269,26 @@ namespace CCRP_Plugin.Services
         private bool TryClaim(UnturnedPlayer player, string bypassPermission, BypassType type, ushort id, out string errorKey)
         {
             errorKey = null;
-            RocketPermissionsGroup group = GetOwnedGroup(player, out errorKey);
-            if (group == null)
+            RocketPermissionsGroup group = null;
+            if (WasCreated(player.Id))
             {
+                group = GetOwnedGroup(player, out errorKey);
+                if (group == null)
+                {
+                    return false;
+                }
+            }
+            else if (HasAnyPurchase(player.Id))
+            {
+                if (!TryGetOrCreateShopGroup(player, out group, out errorKey))
+                {
+                    return false;
+                }
+            }
+            else if (R.Permissions.GetGroup(GetPersonalGroupId(player)) != null)
+            {
+                Logger.LogError($"Refusing to use unregistered Rocket permissions group {GetPersonalGroupId(player)} for {player.Id}.");
+                errorKey = "BypassGroupOwnershipInvalid";
                 return false;
             }
 
@@ -1348,8 +1300,12 @@ namespace CCRP_Plugin.Services
 
             if (HasPurchasedPermission(player.Id, bypassPermission))
             {
-                if (!group.Permissions.Any(permission => permission != null &&
-                        string.Equals(permission.Name, bypassPermission, StringComparison.OrdinalIgnoreCase)))
+                if (!TryGetOrCreateShopGroup(player, out group, out errorKey))
+                {
+                    return false;
+                }
+
+                if (!HasGroupPermission(group, bypassPermission))
                 {
                     group.Permissions.Add(new Permission(bypassPermission, 0));
                     if (!SaveGroup(group))
@@ -1365,9 +1321,7 @@ namespace CCRP_Plugin.Services
                 return false;
             }
 
-            Permission ownedPermission = group.Permissions.FirstOrDefault(permission =>
-                permission != null && string.Equals(permission.Name, bypassPermission, StringComparison.OrdinalIgnoreCase));
-            if (ownedPermission != null)
+            if (group != null && HasGroupPermission(group, bypassPermission))
             {
                 lock (pendingBypassRemovals)
                 {
@@ -1401,25 +1355,32 @@ namespace CCRP_Plugin.Services
             }
             long maximumBypasses = matchingTiers.Sum(tier => (long)tier.MaxBypasses);
 
-            if (IsShopCreated(player.Id) && !TryAttachDonorParent(group, matchingTiers[0], out errorKey))
-            {
-                return false;
-            }
-
             HashSet<string> knownBypassPermissions = GetKnownBypassPermissions();
             HashSet<string> purchasedPermissions = GetPurchasedPermissions(player.Id);
-            int claimedCount = group.Permissions
-                .Where(permission => permission != null)
-                .Select(permission => permission.Name)
-                .Where(name => !string.IsNullOrWhiteSpace(name) &&
-                    knownBypassPermissions.Contains(name) &&
-                    !purchasedPermissions.Contains(name))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Count();
+            long claimedCount = group == null
+                ? 0
+                : group.Permissions
+                    .Where(permission => permission != null)
+                    .Select(permission => permission.Name)
+                    .Where(name => !string.IsNullOrWhiteSpace(name) &&
+                        knownBypassPermissions.Contains(name) &&
+                        !purchasedPermissions.Contains(name))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .LongCount();
 
             if (claimedCount >= maximumBypasses)
             {
                 errorKey = "BypassLimitReached";
+                return false;
+            }
+
+            if (group == null && !TryGetOrCreateShopGroup(player, out group, out errorKey))
+            {
+                return false;
+            }
+
+            if (IsShopCreated(player.Id) && !TryAttachDonorParent(group, matchingTiers[0], out errorKey))
+            {
                 return false;
             }
 
@@ -1434,7 +1395,6 @@ namespace CCRP_Plugin.Services
 
             return true;
         }
-
         private bool TryConfirmRemoval(UnturnedPlayer player, BypassType expectedType, out ushort id, out string errorKey)
         {
             id = 0;

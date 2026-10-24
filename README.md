@@ -105,9 +105,9 @@ Command and Permission reference for CCRP plugin.
 
 ## Donation Bypasses
 
-Players can create a personal permission group and claim configured item or vehicle bypass permissions, subject to their donation tiers' combined limit.
+On a donor's first eligible free bypass claim, the plugin automatically creates their personal permission group with default metadata and adds the claim. Donors can later use `/bypassgroup name <display name>` and `/bypassgroup color <RRGGBB>` to customize it. Free claims are subject to the combined limit from the donor's configured tiers.
 
-All players can also buy permanent bypasses from the administrator-maintained shop list. Purchases are placed in the player's personal Rocket permission group; if they do not have one, the plugin creates a plain group automatically. Shop-only players do not need `/bypassgroup`. If they later qualify for a donation tier, their existing group and purchased permissions are retained, and `/bypassgroup create` can adopt and customize that shop-created group. The command refuses to create a second personal group and reports when one already exists. Paid purchases do not use donor free-claim slots and cannot be removed using player free-claim commands. A bypass already granted by a free claim, another permission group, or `ccrp.bypass.all` cannot be purchased again.
+All players can also buy permanent bypasses from the administrator-maintained shop list. Purchases are placed in the player's personal Rocket permission group; if they do not have one, the plugin creates a plain group automatically. Shop-only players do not need `/bypassgroup`. If they later qualify for a donation tier, their existing group and purchased permissions are retained, and the first free claim attaches the donor tier to that group. Paid purchases do not use donor free-claim slots and cannot be removed using player free-claim commands. A bypass already granted by a free claim, another permission group, or `ccrp.bypass.all` cannot be purchased again.
 
 ### For all players
 
@@ -115,7 +115,7 @@ Players need `ccrp.bypass.shop` for these shop and listing commands. Grant it to
 
 | Command | Description | Permission |
 |---|---|---|
-| `/bypasses` (`/bypasslist`) | Shows your purchased and claimed item and vehicle bypasses in chat. | `ccrp.bypass.shop` |
+| `/bypasses` (`/bypasslist`) | Shows your donor bypasses used/allowed, paid bypasses purchased/allowed, and your bypass list. | `ccrp.bypass.shop` |
 | `/bypassshop` (`/bshop`) | Lists item and vehicle bypass offers currently available for purchase with in-game money. | `ccrp.bypass.shop` |
 | `/bypasscost <ID>` | Shows the price for the listed item or vehicle bypass offer with that ID. If both item and vehicle offers use the ID, specify `item` or `vehicle`. | `ccrp.bypass.shop` |
 | `/bypassbuy <item\|vehicle> <ID>` (`/bbuy`) | Purchases one listed bypass offer with in-game money. | `ccrp.bypass.shop` |
@@ -126,9 +126,8 @@ These claim and personal-group commands require the listed bypass permission; co
 
 | Command | Description | Permission |
 |---|---|---|
-| `/bypassgroup create <display name> <RRGGBB>` (`/bg`) | Creates your one personal bypass group, or adopts and customizes your existing shop-created group. An already-created personal group is not created again. The group display name and prefix are set together. The six-digit hex color may optionally start with `#`. | `ccrp.bypassgroup`; requires a configured donation tier |
-| `/bypassgroup name <display name>` (`/bg`) | Changes your personal group's display name and prefix. | `ccrp.bypassgroup`; requires your personal bypass group |
-| `/bypassgroup color <RRGGBB>` (`/bg`) | Changes your personal group's color. The six-digit hex color may optionally start with `#`. | `ccrp.bypassgroup`; requires your personal bypass group |
+| `/bypassgroup name <display name>` (`/bg`) | Changes your personal group display name and prefix. | `ccrp.bypassgroup`; requires your personal bypass group and a configured donation tier |
+| `/bypassgroup color <RRGGBB>` (`/bg`) | Changes your personal group color. The six-digit hex color may optionally start with `#`. | `ccrp.bypassgroup`; requires your personal bypass group and a configured donation tier |
 | `/bypassitem <item ID>` (`/bi`) | Adds an eligible item bypass permission to your personal group. If already in your personal group, starts a removal confirmation. | `ccrp.bypassitem`; requires a configured donation tier and personal bypass group |
 | `/bypassitem confirm` / `/bi confirm`; `/bypassitem cancel` / `/bi cancel` | Confirms or cancels a pending item bypass removal. Confirmation expires after 30 seconds. | `ccrp.bypassitem` |
 | `/bypassvehicle <vehicle ID>` (`/bv`) | Adds an eligible vehicle bypass permission to your personal group. If already in your personal group, starts a removal confirmation. | `ccrp.bypassvehicle`; requires a configured donation tier and personal bypass group |
