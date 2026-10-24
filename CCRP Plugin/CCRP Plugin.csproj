@@ -90,6 +90,7 @@
     <Compile Include="Commands\CommandExceptionHandler.cs" />
     <Compile Include="Commands\CCRPFiremodeCommand.cs" />
     <Compile Include="Commands\CCRPFreezeCommands.cs" />
+    <Compile Include="Commands\CCRPForceDismountCommand.cs" />
     <Compile Include="Commands\CCRPFreecamCommand.cs" />
     <Compile Include="Commands\CCRPTravelCommands.cs" />
     <Compile Include="Commands\CCRPBuildEditorCommand.cs" />

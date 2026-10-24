@@ -34,6 +34,7 @@ namespace CCRP_Plugin.Services
             public Vector3 Destination;
             public float Rotation;
             public ulong? TargetId;
+            public string WarpName;
         }
 
         private static TeleportService instance;
@@ -269,7 +270,7 @@ namespace CCRP_Plugin.Services
                 return;
             }
 
-            service.BeginTeleport(player, new Vector3(warp.X, warp.Y, warp.Z), warp.Rotation, null);
+            service.BeginTeleport(player, new Vector3(warp.X, warp.Y, warp.Z), warp.Rotation, null, warp.Name);
         }
 
         public static bool SetWarp(UnturnedPlayer caller, string name)
@@ -388,7 +389,7 @@ namespace CCRP_Plugin.Services
             service.Say(caller, list);
         }
 
-        private void BeginTeleport(UnturnedPlayer player, Vector3 destination, float rotation, ulong? targetId)
+        private void BeginTeleport(UnturnedPlayer player, Vector3 destination, float rotation, ulong? targetId, string warpName = null)
         {
             if (IsBlocked(player))
             {
@@ -407,8 +408,13 @@ namespace CCRP_Plugin.Services
                 Player = player,
                 Destination = destination,
                 Rotation = rotation,
-                TargetId = targetId
+                TargetId = targetId,
+                WarpName = warpName
             };
+            if (warpName != null)
+            {
+                Say(player, "Warping to '" + warpName + "' in 5 seconds.");
+            }
             pendingCoroutines[playerId] = StartCoroutine(WaitAndTeleport(playerId));
         }
 
@@ -478,7 +484,11 @@ namespace CCRP_Plugin.Services
                     }
 
                     pending.Player.Teleport(pending.Destination, pending.Rotation);
-                    Say(pending.Player, "Teleport complete.");
+                    Say(
+                        pending.Player,
+                        pending.WarpName == null
+                            ? "Teleport complete."
+                            : "You have arrived at warp '" + pending.WarpName + "'.");
                 }
             }
         }

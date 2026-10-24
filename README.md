@@ -7,7 +7,7 @@ Command and Permission reference for CCRP plugin.
 | Command | Description | Permission |
 |---|---|---|
 | `/ban <name> <reason>` | Permanently bans a player. | `ccrp.ban` |
-| `/ban <name> <reason> <duration>` | Temporarily bans a player (`30m`, `2h`, `1d`). | `ccrp.ban` |
+| `/ban <name> <reason> <duration>` | Temporarily bans a player (`10s`, `30m`, `2h`, `1d`). | `ccrp.ban` |
 | `/back` | Returns to your most recent death location. | `ccrp.back` |
 | `/blacklist add <give\|pickup\|both\|vehicle> <id> <bypass-permission>` | Adds an item or vehicle blacklist entry. | `ccrp.blacklist.manage` |
 | `/blacklist remove <give\|pickup\|both\|vehicle> <id>` | Removes a blacklist entry. | `ccrp.blacklist.manage` |
@@ -19,16 +19,17 @@ Command and Permission reference for CCRP plugin.
 | `/firemode <safety\|semi\|auto\|burst>` | Changes the held gun's firemode. | `ccrp.firemode` |
 | `/freecam` | Toggles freecam controls (F1-F5). | `CCRPbuild.freecam` |
 | `/freeze [player]` | Freezes a player until unfrozen or either party disconnects. | `ccrp.freeze` |
+| `/forcedismount <player>` (`/forced`) | Forces a player out of their vehicle. | `ccrp.forcedismount` |
 | `/god [name]` | Toggles Godmode for you or another player. | `ccrp.god`; `ccrp.god.others` for another player |
 | `/delhome <name>` | Deletes one of your homes. | `ccrp.delhome` |
 | `/delwarp <name>` | Deletes a shared warp. | `ccrp.delwarp` |
 | `/home <name>` | Teleports to a home; moving cancels the delay. | `ccrp.home` (5s) or `ccrp.home.<n>` (0-300s; lowest applies) |
 | `/homes` | Lists your homes and limit. | `ccrp.homes` |
-| `/if <autoreload\|autorepair\|all> <on\|off>` (`/itemfeatures`) | Toggles features for the held item. | `ccrp.itemfeatures` |
+| `/if <autoreload\|autorepair\|all> <on\|off>` (`/itemfeatures`) | Toggles reloading and/or repair for the held item or vehicle weapon. | `ccrp.itemfeatures` |
 | `/sethome <name>` | Saves or updates a home. | `ccrp.sethome` (1 home) or `ccrp.sethome.<n>` (1-100; highest applies) |
 | `/i <id-or-name> [amount]` (`/give`) | Gives an item, subject to blacklist and amount limits. | `ccrp.i`; `ccrp.i.<n>` (maximum amount, up to 25) |
 | `/inv <name\|Steam64>` | Opens a read-only inventory snapshot of an online player. | `ccrp.inv` |
-| `/jump` | Teleports to the point you're looking at (up to 100m). | `ccrp.jump` |
+| `/jump` | Teleports to the point you're looking at. | `ccrp.jump` |
 | `/kill [player]` | Kills you or an online player. | `ccrp.kill` |
 | `/kick <name> <reason>` | Kicks an online player. | `ccrp.kick` |
 | `/msg <player> <message>` (`/tell`, `/pm`) | Sends a private message. | `ccrp.tell` |
@@ -40,7 +41,7 @@ Command and Permission reference for CCRP plugin.
 | `/refuelvehicle` | Refuels your current vehicle. | `ccrp.refuelvehicle` |
 | `/repairvehicle` | Repairs your current vehicle. | `ccrp.repairvehicle` |
 | `/removewarn <name> <reason>` | Removes a warning. | `ccrp.removewarn` |
-| `/setattachment [id\|name]` | Sets or clears a held gun's attachments. | `ccrp.setattachment` |
+| `/setattachment [id\|name]` | Forces an attachment onto the held gun regardless of its normal requirements; no argument clears attachments. | `ccrp.setattachment` |
 | `/speed [speed]` | Sets run speed (0-10; default 1). | `ccrp.speed` |
 | `/spectate` | Toggles player markers (F7). | `CCRPbuild.spectate` |
 | `/spypm` | Toggles private-message monitoring. | `ccrp.spypm` |
@@ -56,7 +57,7 @@ Command and Permission reference for CCRP plugin.
 | `/warps` | Lists shared warps. | `ccrp.warps` |
 | `/unban <Steam64ID> <reason>` | Unbans a Steam account. | `ccrp.unban` |
 | `/v <id-or-name>` (`/vehicle`) | Spawns a vehicle, subject to blacklist rules. | `ccrp.v` |
-| `/vehfeatures <autorefuel\|autorepair\|all> <on\|off>` (`/vehiclefeatures`, `/vf`) | Toggles features for your current vehicle. | `ccrp.vehiclefeatures` |
+| `/vehfeatures <autorefuel\|autorepair\|all> <on\|off>` (`/vehiclefeatures`, `/vf`) | Toggles refuelling and/or repair for your current vehicle. | `ccrp.vehiclefeatures` |
 | `/vanish [name]` | Toggles your or another player's vanish. | `ccrp.vanish`; `ccrp.vanish.others` for another player |
 | `/warn <name> <reason>` | Warns an online player. | `ccrp.warn` |
 | `/warns [name]` | Shows your warnings or another player's. | `ccrp.warns`; `ccrp.warns.other` for another player |
@@ -65,7 +66,7 @@ Command and Permission reference for CCRP plugin.
 ## Permission Notes
 
 - Plugin-owned JSON files are stored in the plugin's `Data` folder. On its first startup after this update, existing top-level `.json` files are copied there only when the matching destination file does not already exist; the originals are retained as backups.
-- `/back` death locations are saved by Steam64 ID in `Data\DeathLocations.json` and persist across reconnects and server restarts.
+- `/back` death locations are saved only for players with `ccrp.back`, expire after 60 seconds, and are consumed when used. They are stored by Steam64 ID in `Data\DeathLocations.json`.
 - To let `/give` grant amounts greater than one, grant the caller the appropriate `ccrp.i.<n>` permission. The number is the maximum amount allowed by that permission, up to 25.
 - Homes are stored per player in `Homes.json`. A player needs only one of `ccrp.sethome` or `ccrp.sethome.<n>` to use `/sethome`, and only one of `ccrp.home` or `ccrp.home.<n>` to use `/home`.
 - Rocket.Unturned has its own built-in `/home` (bed teleport). If it takes precedence on your server, disable it with `<Command Name="home" Enabled="false" />` in `Rocket\Commands.config.xml`.

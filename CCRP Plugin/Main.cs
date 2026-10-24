@@ -775,7 +775,27 @@ namespace CCRPPlugin
 
         private void OnPlayerDeath(UnturnedPlayer player, EDeathCause cause, ELimb limb, CSteamID murderer)
         {
+            if (player == null)
+            {
+                return;
+            }
 
+            string message;
+            if (murderer.m_SteamID != 0 && murderer.m_SteamID != player.CSteamID.m_SteamID)
+            {
+                UnturnedPlayer killer = UnturnedPlayer.FromCSteamID(murderer);
+                string killerName = killer == null ? murderer.m_SteamID.ToString(CultureInfo.InvariantCulture) : killer.DisplayName;
+                string killerDistance = killer == null
+                    ? "an unknown distance"
+                    : UnityEngine.Vector3.Distance(player.Position, killer.Position).ToString("0", CultureInfo.InvariantCulture) + "m";
+                message = Translate("PlayerDeathByPlayer", player.DisplayName, killerName, killerDistance);
+            }
+            else
+            {
+                message = Translate("PlayerDeath", player.DisplayName, cause.ToString().ToLowerInvariant());
+            }
+
+            UnturnedChat.Say(message, MessageColor);
         }
         protected override void Unload()
         {
@@ -1030,6 +1050,14 @@ namespace CCRPPlugin
             { "WreckVehicleSyntax", "Use /wv while looking at the vehicle you want to destroy." },
             { "WreckVehicleNotFound", "No vehicle found within {0} meters of where you are looking." },
             { "WreckVehicleDestroyed", "Destroyed vehicle {0} ({1})." },
+            { "ItemFeaturesSyntax", "Use /if <autoreload|autorepair|all> <on|off>." },
+            { "ItemFeaturesNoItem", "Hold an item or occupy a vehicle weapon seat first." },
+            { "ItemFeaturesEnabled", "{0} enabled for this item." },
+            { "ItemFeaturesDisabled", "{0} disabled for this item." },
+            { "VehicleFeaturesSyntax", "Use /vf <autorefuel|autorepair|all> <on|off>." },
+            { "VehicleFeaturesNoVehicle", "You must be in a vehicle first." },
+            { "VehicleFeaturesEnabled", "{0} enabled for this vehicle." },
+            { "VehicleFeaturesDisabled", "{0} disabled for this vehicle." },
             { "WreckReasonRequired", "A reason is required. Use /{0} confirm <reason>." },
             { "WreckConfirm", "Destroying {0} queued targets. Use /wreck abort to stop further destruction." },
             { "WreckNoRequest", "You do not have a pending or active wreck request." },
@@ -1040,6 +1068,8 @@ namespace CCRPPlugin
             { "PlayerJoined", "{0} joined the Server!" },
             { "PlayerLeft", "{0} left the Server!" },
             { "PlayerLeftOffDuty", "{0} left the Server and is off duty {1}!" },
+            { "PlayerDeath", "{0} died ({1})." },
+            { "PlayerDeathByPlayer", "{0} was killed by {1} from {2} away." },
             { "GiveSuccessWithoutAmount", "You received the item 1x {0} ({1})!"},
             { "GiveSuccessWithAmount", "You received the item {0}x {1} ({2})!" },
             { "GiveItemNotFound", "The item has not been found!" },

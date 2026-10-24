@@ -49,9 +49,9 @@ namespace CCRPPlugin.Commands
             }
 
             DeathLocation location;
-            if (!plugin.DeathLocationService.TryGet(player.CSteamID, out location))
+            if (!plugin.DeathLocationService.TryConsume(player.CSteamID, out location))
             {
-                UnturnedChat.Say(caller, "No saved death location is available.");
+                UnturnedChat.Say(caller, "No saved death location is available, or it has expired.");
                 return;
             }
 

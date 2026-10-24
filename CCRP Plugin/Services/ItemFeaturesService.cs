@@ -11,15 +11,14 @@ namespace CCRP_Plugin.Services
             public ItemJar Item;
             public bool AutoReload;
             public bool AutoRepair;
-            public ushort MagazineId;
-            public byte MagazineCapacity;
-            public bool HasMagazineCapacity;
         }
 
-        private const float UpdateInterval = 0.25f;
+        private const float UpdateInterval = 0.05f;
 
         private readonly List<ItemFeatureState> itemStates = new List<ItemFeatureState>();
         private Player player;
+        private bool turretAutoReload;
+        private bool turretAutoRepair;
         private float nextUpdate;
         private float nextPrune;
 
@@ -53,6 +52,13 @@ namespace CCRP_Plugin.Services
             state.AutoReload = autoReload;
             state.AutoRepair = autoRepair;
 
+            if (state.AutoReload && player != null && player.equipment != null &&
+                player.inventory != null && player.equipment.isEquipped &&
+                ReferenceEquals(FindHeldItem(player.equipment, player.inventory), item))
+            {
+                ReloadHeldGun(player.equipment, false);
+            }
+
             if (!state.AutoReload && !state.AutoRepair)
             {
                 itemStates.Remove(state);
@@ -64,6 +70,18 @@ namespace CCRP_Plugin.Services
             ItemFeatureState state = item == null ? null : FindState(item);
             autoReload = state != null && state.AutoReload;
             autoRepair = state != null && state.AutoRepair;
+        }
+
+        public void SetTurretFeatures(bool autoReload, bool autoRepair)
+        {
+            turretAutoReload = autoReload;
+            turretAutoRepair = autoRepair;
+        }
+
+        public void GetTurretFeatures(out bool autoReload, out bool autoRepair)
+        {
+            autoReload = turretAutoReload;
+            autoRepair = turretAutoRepair;
         }
 
         private void Update()
@@ -82,6 +100,26 @@ namespace CCRP_Plugin.Services
 
             PlayerEquipment equipment = player.equipment;
             PlayerInventory inventory = player.inventory;
+            if (equipment != null && equipment.isTurret)
+            {
+                if (turretAutoRepair && equipment.quality < byte.MaxValue)
+                {
+                    equipment.quality = byte.MaxValue;
+                    equipment.updateQuality();
+                    equipment.sendUpdateQuality();
+                }
+
+                if (turretAutoReload)
+                {
+                    ReloadHeldGun(equipment, true);
+                }
+
+                return;
+            }
+
+            turretAutoReload = false;
+            turretAutoRepair = false;
+
             if (inventory != null && Time.time >= nextPrune)
             {
                 nextPrune = Time.time + 10f;
@@ -108,11 +146,13 @@ namespace CCRP_Plugin.Services
             if (state.AutoRepair && equipment.quality < byte.MaxValue)
             {
                 equipment.quality = byte.MaxValue;
+                equipment.updateQuality();
+                equipment.sendUpdateQuality();
             }
 
             if (state.AutoReload)
             {
-                ReloadHeldGun(equipment, state);
+                ReloadHeldGun(equipment, false);
             }
         }
 
@@ -144,9 +184,10 @@ namespace CCRP_Plugin.Services
             return null;
         }
 
-        private static void ReloadHeldGun(PlayerEquipment equipment, ItemFeatureState featureState)
+        private static void ReloadHeldGun(PlayerEquipment equipment, bool allowMissingMagazine)
         {
-            if (!(equipment.asset is ItemGunAsset) || equipment.state == null)
+            ItemGunAsset gunAsset = equipment.asset as ItemGunAsset;
+            if (gunAsset == null || equipment.state == null)
             {
                 return;
             }
@@ -160,20 +201,12 @@ namespace CCRP_Plugin.Services
             }
 
             ushort magazineId = (ushort)(state[8] | (state[9] << 8));
-            if (magazineId == 0)
+            if (!allowMissingMagazine && magazineId == 0)
             {
                 return;
             }
 
-            if (!featureState.HasMagazineCapacity || featureState.MagazineId != magazineId)
-            {
-                ItemMagazineAsset magazine = Assets.find(EAssetType.ITEM, magazineId) as ItemMagazineAsset;
-                featureState.MagazineId = magazineId;
-                featureState.MagazineCapacity = magazine == null ? (byte)0 : magazine.count;
-                featureState.HasMagazineCapacity = true;
-            }
-
-            byte capacity = featureState.MagazineCapacity;
+            byte capacity = gunAsset.ammoMax;
             if (capacity == 0 || state[10] >= capacity)
             {
                 return;
@@ -181,6 +214,8 @@ namespace CCRP_Plugin.Services
 
             state[10] = capacity;
             equipment.state = state;
+            equipment.updateState();
+            equipment.sendUpdateState();
         }
 
         private ItemFeatureState FindState(ItemJar item)
@@ -239,6 +274,8 @@ namespace CCRP_Plugin.Services
         private void OnDestroy()
         {
             itemStates.Clear();
+            turretAutoReload = false;
+            turretAutoRepair = false;
             player = null;
         }
     }

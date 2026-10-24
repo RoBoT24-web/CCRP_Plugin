@@ -7,7 +7,6 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using System.Reflection;
 using UnityEngine;
 
 namespace CCRPPlugin.Commands
@@ -103,8 +102,9 @@ namespace CCRPPlugin.Commands
                 return;
             }
 
-            object useable = player.Player.equipment.useable;
-            if (useable == null || !useable.GetType().Name.Contains("Gun"))
+            PlayerEquipment equipment = player.Player.equipment;
+            if (equipment == null || !(equipment.asset is ItemGunAsset) ||
+                equipment.useable == null || !equipment.useable.GetType().Name.Contains("Gun"))
             {
                 UnturnedChat.Say(caller, "Hold a gun first.");
                 return;
@@ -112,10 +112,7 @@ namespace CCRPPlugin.Commands
 
             if (command.Length == 0)
             {
-                bool changed = false;
-                foreach (string slot in AttachmentSlots)
-                    changed |= InvokeAttachmentChange(useable, slot, 0);
-
+                bool changed = SetAttachmentState(equipment, null, 0);
                 UnturnedChat.Say(caller, changed ? "Gun attachments cleared." : "Attachment changes are unavailable for this gun.");
                 return;
             }
@@ -127,16 +124,16 @@ namespace CCRPPlugin.Commands
                 return;
             }
 
-            string attachmentSlot = GetAttachmentSlot(attachment.GetType().Name);
-            if (attachmentSlot == null)
+            int attachmentStateIndex = GetAttachmentStateIndex(attachment.GetType().Name);
+            if (attachmentStateIndex < 0)
             {
                 UnturnedChat.Say(caller, "That item is not a supported gun attachment.");
                 return;
             }
 
-            if (!InvokeAttachmentChange(useable, attachmentSlot, attachment.id))
+            if (!SetAttachmentState(equipment, attachmentStateIndex, attachment.id))
             {
-                UnturnedChat.Say(caller, "This gun does not support that attachment change.");
+                UnturnedChat.Say(caller, "Attachment changes are unavailable for this gun.");
                 return;
             }
 
@@ -166,31 +163,54 @@ namespace CCRPPlugin.Commands
             return candidates.Count == 1 ? candidates[0] : null;
         }
 
-        private static string GetAttachmentSlot(string typeName)
+        private static int GetAttachmentStateIndex(string typeName)
         {
-            foreach (string slot in AttachmentSlots)
+            for (int i = 0; i < AttachmentSlots.Length; i++)
             {
-                if (typeName.IndexOf(slot, StringComparison.OrdinalIgnoreCase) >= 0)
-                    return slot;
+                if (typeName.IndexOf(AttachmentSlots[i], StringComparison.OrdinalIgnoreCase) >= 0)
+                    return i * 2;
             }
 
-            return null;
+            return -1;
         }
 
-        // Use the installed game's receive method rather than editing serialized item-state bytes.
-        // The local Unturned build exposes ReceiveChangeFiremode with this same receive-method pattern.
-        private static bool InvokeAttachmentChange(object useable, string slot, ushort id)
+        private static bool SetAttachmentState(PlayerEquipment equipment, int? attachmentStateIndex, ushort id)
         {
-            MethodInfo method = useable.GetType().GetMethod(
-                "ReceiveChange" + slot,
-                BindingFlags.Public | BindingFlags.Instance,
-                null,
-                new[] { typeof(ushort) },
-                null);
-            if (method == null)
+            byte[] state = equipment.state;
+            if (state == null)
                 return false;
 
-            method.Invoke(useable, new object[] { id });
+            bool changed = false;
+            if (attachmentStateIndex.HasValue)
+            {
+                int index = attachmentStateIndex.Value;
+                if (index + 1 >= state.Length)
+                    return false;
+
+                changed = state[index] != (byte)id || state[index + 1] != (byte)(id >> 8);
+                state[index] = (byte)id;
+                state[index + 1] = (byte)(id >> 8);
+            }
+            else
+            {
+                for (int index = 0; index < AttachmentSlots.Length * 2; index += 2)
+                {
+                    if (index + 1 >= state.Length)
+                        return false;
+
+                    changed |= state[index] != 0 || state[index + 1] != 0;
+                    state[index] = 0;
+                    state[index + 1] = 0;
+                }
+            }
+
+            if (changed)
+            {
+                equipment.state = state;
+                equipment.updateState();
+                equipment.sendUpdateState();
+            }
+
             return true;
         }
     }
@@ -264,11 +284,11 @@ namespace CCRPPlugin.Commands
                 Transform aim = player.Player.look.aim;
                 RaycastInfo hit = DamageTool.raycast(
                     new Ray(aim.position, aim.forward),
-                    100f,
+                    float.PositiveInfinity,
                     RayMasks.BARRICADE_INTERACT | RayMasks.STRUCTURE_INTERACT);
                 if (hit == null || hit.transform == null)
                 {
-                    UnturnedChat.Say(caller, "No destination found within 100 meters.");
+                    UnturnedChat.Say(caller, "No destination found.");
                     return;
                 }
 

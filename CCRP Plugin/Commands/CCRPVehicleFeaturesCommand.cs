@@ -35,14 +35,14 @@ namespace CCRPPlugin.Commands
             bool enabled;
             if (!TryParse(command, out allFeatures, out autoRefuel, out autoRepair, out enabled))
             {
-                UnturnedChat.Say(caller, "Syntax: /vehiclefeatures <autorefuel|autorepair|all> <on|off>");
+                UnturnedChat.Say(caller, Main.Instance.Translate("VehicleFeaturesSyntax"), Main.Instance.MessageColor);
                 return;
             }
 
             InteractableVehicle vehicle = FindOccupiedVehicle(player.Player);
             if (vehicle == null)
             {
-                UnturnedChat.Say(caller, "You must be occupying a vehicle to use this command.");
+                UnturnedChat.Say(caller, Main.Instance.Translate("VehicleFeaturesNoVehicle"), Main.Instance.MessageColor);
                 return;
             }
 
@@ -77,8 +77,12 @@ namespace CCRPPlugin.Commands
             }
 
             service.SetFeatures(nextAutoRefuel, nextAutoRepair);
-            UnturnedChat.Say(caller, "Vehicle features for this vehicle are now " +
-                DescribeFeatures(nextAutoRefuel, nextAutoRepair) + ".");
+            string changedFeatures = allFeatures
+                ? "Auto-refuel and auto-repair"
+                : autoRefuel ? "Auto-refuel" : "Auto-repair";
+            UnturnedChat.Say(caller, Main.Instance.Translate(
+                enabled ? "VehicleFeaturesEnabled" : "VehicleFeaturesDisabled",
+                changedFeatures), Main.Instance.MessageColor);
         }
 
         private static bool TryParse(string[] command, out bool allFeatures, out bool autoRefuel, out bool autoRepair, out bool enabled)
@@ -145,22 +149,5 @@ namespace CCRPPlugin.Commands
             return null;
         }
 
-        private static string DescribeFeatures(bool autoRefuel, bool autoRepair)
-        {
-            if (autoRefuel && autoRepair)
-            {
-                return "autorefuel and autorepair enabled";
-            }
-            if (autoRefuel)
-            {
-                return "autorefuel enabled";
-            }
-            if (autoRepair)
-            {
-                return "autorepair enabled";
-            }
-
-            return "disabled";
-        }
     }
 }

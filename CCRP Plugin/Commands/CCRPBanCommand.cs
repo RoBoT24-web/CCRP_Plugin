@@ -102,6 +102,9 @@ namespace CCRPPlugin.Commands
 			uint multiplier;
 			switch (unit)
 			{
+				case 's':
+					multiplier = 1;
+					break;
 				case 'm':
 					multiplier = 60;
 					break;

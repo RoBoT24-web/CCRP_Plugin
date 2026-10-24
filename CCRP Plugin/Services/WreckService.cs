@@ -1,5 +1,6 @@
 using CCRPPlugin;
 using Rocket.Unturned.Chat;
+using Rocket.Unturned.Player;
 using SDG.Unturned;
 using Steamworks;
 using System;
@@ -415,7 +416,14 @@ namespace CCRP_Plugin.Services
 
             if (!request.IsCancelled)
             {
-                UnturnedChat.Say(Main.Instance.Translate("WreckCompleted", request.Destroyed, request.Targets.Count - request.Destroyed - request.Failed, request.Failed), Main.Instance.MessageColor);
+                UnturnedPlayer caller = UnturnedPlayer.FromCSteamID(new CSteamID(request.CallerId));
+                if (caller != null)
+                {
+                    UnturnedChat.Say(
+                        caller,
+                        Main.Instance.Translate("WreckCompleted", request.Destroyed, request.Targets.Count - request.Destroyed - request.Failed, request.Failed),
+                        Main.Instance.MessageColor);
+                }
             }
         }
 

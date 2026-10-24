@@ -35,14 +35,16 @@ namespace CCRPPlugin.Commands
             bool enabled;
             if (!TryParse(command, out allFeatures, out autoReload, out autoRepair, out enabled))
             {
-                UnturnedChat.Say(caller, "Syntax: /itemfeatures <autoreload|autorepair|all> <on|off>");
+                UnturnedChat.Say(caller, Main.Instance.Translate("ItemFeaturesSyntax"), Main.Instance.MessageColor);
                 return;
             }
 
-            ItemJar heldItem = FindHeldItem(player.Player);
-            if (heldItem == null)
+            PlayerEquipment equipment = player.Player.equipment;
+            bool turretGun = equipment != null && equipment.isTurret && equipment.asset is ItemGunAsset;
+            ItemJar heldItem = turretGun ? null : FindHeldItem(player.Player);
+            if (!turretGun && heldItem == null)
             {
-                UnturnedChat.Say(caller, "You must be holding an item to use this command.");
+                UnturnedChat.Say(caller, Main.Instance.Translate("ItemFeaturesNoItem"), Main.Instance.MessageColor);
                 return;
             }
 
@@ -53,33 +55,65 @@ namespace CCRPPlugin.Commands
                 service.Initialize(player.Player);
             }
 
-            bool nextAutoReload = autoReload;
-            bool nextAutoRepair = autoRepair;
-            if (allFeatures)
+            if (turretGun)
             {
-                nextAutoReload = enabled;
-                nextAutoRepair = enabled;
-            }
-            else
-            {
-                bool currentAutoReload;
-                bool currentAutoRepair;
-                service.GetFeatures(heldItem, out currentAutoReload, out currentAutoRepair);
-                if (autoReload)
+                bool nextAutoReload = autoReload;
+                bool nextAutoRepair = autoRepair;
+                if (allFeatures)
                 {
                     nextAutoReload = enabled;
-                    nextAutoRepair = currentAutoRepair;
+                    nextAutoRepair = enabled;
                 }
                 else
                 {
-                    nextAutoReload = currentAutoReload;
+                    service.GetTurretFeatures(out bool currentAutoReload, out bool currentAutoRepair);
+                    if (autoReload)
+                    {
+                        nextAutoReload = enabled;
+                        nextAutoRepair = currentAutoRepair;
+                    }
+                    else
+                    {
+                        nextAutoReload = currentAutoReload;
+                        nextAutoRepair = enabled;
+                    }
+                }
+
+                service.SetTurretFeatures(nextAutoReload, nextAutoRepair);
+            }
+            else
+            {
+                bool nextAutoReload = autoReload;
+                bool nextAutoRepair = autoRepair;
+                if (allFeatures)
+                {
+                    nextAutoReload = enabled;
                     nextAutoRepair = enabled;
                 }
+                else
+                {
+                    service.GetFeatures(heldItem, out bool currentAutoReload, out bool currentAutoRepair);
+                    if (autoReload)
+                    {
+                        nextAutoReload = enabled;
+                        nextAutoRepair = currentAutoRepair;
+                    }
+                    else
+                    {
+                        nextAutoReload = currentAutoReload;
+                        nextAutoRepair = enabled;
+                    }
+                }
+
+                service.SetFeatures(heldItem, nextAutoReload, nextAutoRepair);
             }
 
-            service.SetFeatures(heldItem, nextAutoReload, nextAutoRepair);
-            UnturnedChat.Say(caller, "Item features for this item are now " +
-                DescribeFeatures(nextAutoReload, nextAutoRepair) + ".");
+            string changedFeatures = allFeatures
+                ? "Auto-reload and auto-repair"
+                : autoReload ? "Auto-reload" : "Auto-repair";
+            UnturnedChat.Say(caller, Main.Instance.Translate(
+                enabled ? "ItemFeaturesEnabled" : "ItemFeaturesDisabled",
+                changedFeatures), Main.Instance.MessageColor);
         }
 
         private static bool TryParse(string[] command, out bool allFeatures, out bool autoReload, out bool autoRepair, out bool enabled)
@@ -148,22 +182,5 @@ namespace CCRPPlugin.Commands
             return null;
         }
 
-        private static string DescribeFeatures(bool autoReload, bool autoRepair)
-        {
-            if (autoReload && autoRepair)
-            {
-                return "autoreload and autorepair enabled";
-            }
-            if (autoReload)
-            {
-                return "autoreload enabled";
-            }
-            if (autoRepair)
-            {
-                return "autorepair enabled";
-            }
-
-            return "disabled";
-        }
     }
 }
