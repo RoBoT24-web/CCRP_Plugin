@@ -42,10 +42,11 @@ namespace CCRPPlugin.Commands
                 return;
             }
 
+            // Broadcast to all clients so the restraint state is cleared for the target and observers.
+            animator.sendGesture(EPlayerGesture.ARREST_STOP, true);
             animator.captorID = Steamworks.CSteamID.Nil;
             animator.captorItem = 0;
             animator.captorStrength = 0;
-            animator.sendGesture(EPlayerGesture.ARREST_STOP, false);
 
             UnturnedChat.Say(caller, "Uncuffed " + target.DisplayName + ".");
             UnturnedChat.Say(target, "You have been uncuffed.");

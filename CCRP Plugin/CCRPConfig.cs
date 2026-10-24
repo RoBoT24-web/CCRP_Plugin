@@ -134,11 +134,15 @@ namespace CCRPPlugin
         [XmlArrayItem("Permission")]
         public List<string> DeniedPermissions { get; set; }
 
+        [XmlElement(Order = 2)]
+        public int MaxPaidBypasses { get; set; }
+
         public DonationBypassSettings()
         {
             Tiers = new List<DonationBypassTier>();
             // Must stay empty: XmlSerializer appends loaded items to a pre-filled list, duplicating defaults on every load.
             DeniedPermissions = new List<string>();
+            MaxPaidBypasses = 5;
         }
     }
 

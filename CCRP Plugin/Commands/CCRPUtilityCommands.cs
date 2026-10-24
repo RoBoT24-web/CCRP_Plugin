@@ -171,14 +171,14 @@ namespace CCRPPlugin.Commands
         }
     }
 
-    public sealed class CCRPOpenDoorCommand : IRocketCommand
+    public sealed class CCRPDoorCommand : IRocketCommand
     {
         public AllowedCaller AllowedCaller => AllowedCaller.Player;
-        public string Name => "opendoor";
-        public string Help => "Open the door you are looking at.";
+        public string Name => "door";
+        public string Help => "Open or close the door you are looking at.";
         public string Syntax => "";
         public List<string> Aliases => new List<string>();
-        public List<string> Permissions => new List<string> { "ccrp.opendoor" };
+        public List<string> Permissions => new List<string> { "ccrp.door" };
 
         public void Execute(IRocketPlayer caller, string[] command)
         {
@@ -187,7 +187,7 @@ namespace CCRPPlugin.Commands
                 UnturnedPlayer player = caller as UnturnedPlayer;
                 if (player == null || command.Length != 0)
                 {
-                    UnturnedChat.Say(caller, "Usage: /opendoor");
+                    UnturnedChat.Say(caller, "Usage: /door");
                     return;
                 }
 
@@ -197,13 +197,20 @@ namespace CCRPPlugin.Commands
                     ? null
                     : hit.transform.GetComponentInParent<InteractableDoor>();
 
-                if (door == null || !door.isOpenable || !BarricadeManager.ServerSetDoorOpen(door, true))
+                if (door == null || !door.isOpenable)
                 {
-                    UnturnedChat.Say(caller, "No openable door found.");
+                    UnturnedChat.Say(caller, "No door found.");
                     return;
                 }
 
-                UnturnedChat.Say(caller, "Door opened.");
+                bool open = !door.isOpen;
+                if (!BarricadeManager.ServerSetDoorOpen(door, open))
+                {
+                    UnturnedChat.Say(caller, "Unable to change the door state.");
+                    return;
+                }
+
+                UnturnedChat.Say(caller, open ? "Door opened." : "Door closed.");
             });
         }
     }

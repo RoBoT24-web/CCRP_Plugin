@@ -58,6 +58,8 @@ namespace CCRPPlugin
         public List<DutyGroups> ValidGroups;
         private readonly Dictionary<ushort, List<string>> giveItemBypassPermissions = new Dictionary<ushort, List<string>>();
         private readonly Dictionary<ushort, List<string>> pickupItemBypassPermissions = new Dictionary<ushort, List<string>>();
+        private readonly Dictionary<EItemType, List<string>> giveItemTypeBypassPermissions = new Dictionary<EItemType, List<string>>();
+        private readonly Dictionary<EItemType, List<string>> pickupItemTypeBypassPermissions = new Dictionary<EItemType, List<string>>();
         private DataStorage<BlacklistSettings> blacklistStorage;
 
 
@@ -130,22 +132,16 @@ namespace CCRPPlugin
             Logger.Log("==========================");
             Logger.Log("");
             Logger.Log("Blacklisted Items");
-            foreach (var item in Blacklists.GiveItemBlacklist.Select(x => $"ID: {x.Id} | " +
-            $"Name: {Assets.find(EAssetType.ITEM, x.Id)?.name ?? "UNKNOWN"} | " +
-            $"Bypass: {x.Bypass ?? "NONE"}")) 
+            foreach (var item in Blacklists.GiveItemBlacklist.Select(FormatItemBlacklistEntry))
             {
                 Logger.Log(item);
             }
-            foreach (var item in Blacklists.GiveAndPickupItemBlacklist.Select(x => $"ID: {x.Id} | " +
-            $"Name: {Assets.find(EAssetType.ITEM, x.Id)?.name ?? "UNKNOWN"} | " +
-            $"Bypass: {x.Bypass ?? "NONE"} (give and pickup)"))
+            foreach (var item in Blacklists.GiveAndPickupItemBlacklist.Select(x => FormatItemBlacklistEntry(x) + " (give and pickup)"))
             {
                 Logger.Log(item);
             }
             Logger.Log("Pickup-only Blacklisted Items");
-            foreach (var item in Blacklists.PickupItemBlacklist.Select(x => $"ID: {x.Id} | " +
-            $"Name: {Assets.find(EAssetType.ITEM, x.Id)?.name ?? "UNKNOWN"} | " +
-            $"Bypass: {x.Bypass ?? "NONE"}"))
+            foreach (var item in Blacklists.PickupItemBlacklist.Select(FormatItemBlacklistEntry))
             {
                 Logger.Log(item);
             }
@@ -281,6 +277,11 @@ namespace CCRPPlugin
             {
                 Configuration.Instance.DonationBypasses.DeniedPermissions = new List<string>();
             }
+            if (Configuration.Instance.DonationBypasses.MaxPaidBypasses < 0)
+            {
+                Logger.LogError("DonationBypasses.MaxPaidBypasses cannot be negative.");
+                throw new InvalidDataException("DonationBypasses.MaxPaidBypasses cannot be negative.");
+            }
             // Clean up duplicates written by earlier versions.
             Configuration.Instance.DonationBypasses.DeniedPermissions = Configuration.Instance.DonationBypasses.DeniedPermissions
                 .Where(p => !string.IsNullOrWhiteSpace(p))
@@ -399,9 +400,27 @@ namespace CCRPPlugin
             List<GiveSoftBlacklist> entries = new List<GiveSoftBlacklist>();
             foreach (System.Xml.XmlElement itemElement in element.ChildNodes.OfType<System.Xml.XmlElement>())
             {
-                ushort id;
                 string bypass = itemElement.GetAttribute("BypassPermission");
-                if (!ushort.TryParse(itemElement.InnerText, out id) || id == 0 || string.IsNullOrWhiteSpace(bypass))
+                string itemTypeName = itemElement.GetAttribute("ItemType");
+                if (string.IsNullOrWhiteSpace(bypass))
+                {
+                    throw new InvalidDataException("Legacy GiveItemBlacklist contains an invalid entry.");
+                }
+
+                if (!string.IsNullOrWhiteSpace(itemTypeName))
+                {
+                    EItemType itemType;
+                    if (!TryParseItemType(itemTypeName, out itemType))
+                    {
+                        throw new InvalidDataException("Legacy GiveItemBlacklist contains an invalid item type.");
+                    }
+
+                    entries.Add(new GiveSoftBlacklist { ItemType = itemType.ToString(), Bypass = bypass });
+                    continue;
+                }
+
+                ushort id;
+                if (!ushort.TryParse(itemElement.InnerText, out id) || id == 0)
                 {
                     throw new InvalidDataException("Legacy GiveItemBlacklist contains an invalid entry.");
                 }
@@ -481,12 +500,12 @@ namespace CCRPPlugin
             {
                 Blacklists.VehicleSpawnBlacklist = new List<VehicleSpawnBlacklist>();
             }
-            if (Blacklists.GiveItemBlacklist.Any(item => item == null || string.IsNullOrWhiteSpace(item.Bypass)) ||
-                Blacklists.PickupItemBlacklist.Any(item => item == null || string.IsNullOrWhiteSpace(item.Bypass)) ||
-                Blacklists.GiveAndPickupItemBlacklist.Any(item => item == null || string.IsNullOrWhiteSpace(item.Bypass)) ||
+            if (Blacklists.GiveItemBlacklist.Any(IsInvalidItemBlacklistEntry) ||
+                Blacklists.PickupItemBlacklist.Any(IsInvalidItemBlacklistEntry) ||
+                Blacklists.GiveAndPickupItemBlacklist.Any(IsInvalidItemBlacklistEntry) ||
                 Blacklists.VehicleSpawnBlacklist.Any(vehicle => vehicle == null || string.IsNullOrWhiteSpace(vehicle.Bypass)))
             {
-                Logger.LogError("Blacklists.json contains an entry with a missing bypass permission.");
+                Logger.LogError("Blacklists.json contains an invalid item entry or a missing bypass permission.");
                 throw new InvalidDataException("Blacklists.json contains an invalid entry.");
             }
 
@@ -549,22 +568,29 @@ namespace CCRPPlugin
         {
             giveItemBypassPermissions.Clear();
             pickupItemBypassPermissions.Clear();
+            giveItemTypeBypassPermissions.Clear();
+            pickupItemTypeBypassPermissions.Clear();
             foreach (GiveSoftBlacklist item in Blacklists.GiveItemBlacklist)
             {
-                AddBypassPermission(giveItemBypassPermissions, item);
+                AddBypassPermission(giveItemBypassPermissions, giveItemTypeBypassPermissions, item);
             }
             foreach (GiveSoftBlacklist item in Blacklists.PickupItemBlacklist)
             {
-                AddBypassPermission(pickupItemBypassPermissions, item);
+                AddBypassPermission(pickupItemBypassPermissions, pickupItemTypeBypassPermissions, item);
             }
             foreach (GiveSoftBlacklist item in Blacklists.GiveAndPickupItemBlacklist)
             {
-                AddBypassPermission(giveItemBypassPermissions, item);
-                AddBypassPermission(pickupItemBypassPermissions, item);
+                AddBypassPermission(giveItemBypassPermissions, giveItemTypeBypassPermissions, item);
+                AddBypassPermission(pickupItemBypassPermissions, pickupItemTypeBypassPermissions, item);
             }
         }
 
         public bool TryAddBlacklistEntry(string category, ushort assetId, string bypassPermission, out string errorKey)
+        {
+            return TryAddBlacklistEntry(category, assetId.ToString(CultureInfo.InvariantCulture), bypassPermission, out errorKey);
+        }
+
+        public bool TryAddBlacklistEntry(string category, string selector, string bypassPermission, out string errorKey)
         {
             errorKey = null;
             if (string.IsNullOrWhiteSpace(bypassPermission))
@@ -576,18 +602,24 @@ namespace CCRPPlugin
             category = category == null ? string.Empty : category.ToLowerInvariant();
             if (category == "vehicle")
             {
-                if (Assets.find(EAssetType.VEHICLE, assetId) == null)
+                ushort vehicleId;
+                if (!ushort.TryParse(selector, NumberStyles.None, CultureInfo.InvariantCulture, out vehicleId) || vehicleId == 0)
+                {
+                    errorKey = "BlacklistInvalidId";
+                    return false;
+                }
+                if (Assets.find(EAssetType.VEHICLE, vehicleId) == null)
                 {
                     errorKey = "BlacklistAssetNotFound";
                     return false;
                 }
-                if (Blacklists.VehicleSpawnBlacklist.Any(vehicle => vehicle.VehicleId == assetId))
+                if (Blacklists.VehicleSpawnBlacklist.Any(vehicle => vehicle.VehicleId == vehicleId))
                 {
                     errorKey = "BlacklistAlreadyExists";
                     return false;
                 }
 
-                VehicleSpawnBlacklist entry = new VehicleSpawnBlacklist { VehicleId = assetId, Bypass = bypassPermission };
+                VehicleSpawnBlacklist entry = new VehicleSpawnBlacklist { VehicleId = vehicleId, Bypass = bypassPermission };
                 Blacklists.VehicleSpawnBlacklist.Add(entry);
                 if (!SaveBlacklistChanges())
                 {
@@ -604,15 +636,34 @@ namespace CCRPPlugin
                 errorKey = "BlacklistInvalidCategory";
                 return false;
             }
-            if (Assets.find(EAssetType.ITEM, assetId) == null)
+
+            ushort assetId;
+            EItemType itemType = default(EItemType);
+            bool isItemId = ushort.TryParse(selector, NumberStyles.None, CultureInfo.InvariantCulture, out assetId);
+            if (isItemId && assetId == 0)
+            {
+                errorKey = "BlacklistInvalidId";
+                return false;
+            }
+            if (isItemId && Assets.find(EAssetType.ITEM, assetId) == null)
             {
                 errorKey = "BlacklistAssetNotFound";
                 return false;
             }
+            if (!isItemId && IsNumericSelector(selector))
+            {
+                errorKey = "BlacklistInvalidId";
+                return false;
+            }
+            if (!isItemId && !TryParseItemType(selector, out itemType))
+            {
+                errorKey = "BlacklistInvalidType";
+                return false;
+            }
 
-            bool alreadyInGive = Blacklists.GiveItemBlacklist.Any(item => item.Id == assetId);
-            bool alreadyInPickup = Blacklists.PickupItemBlacklist.Any(item => item.Id == assetId);
-            bool alreadyInBoth = Blacklists.GiveAndPickupItemBlacklist.Any(item => item.Id == assetId);
+            bool alreadyInGive = Blacklists.GiveItemBlacklist.Any(item => MatchesBlacklistSelector(item, isItemId, assetId, isItemId ? (EItemType?)null : itemType));
+            bool alreadyInPickup = Blacklists.PickupItemBlacklist.Any(item => MatchesBlacklistSelector(item, isItemId, assetId, isItemId ? (EItemType?)null : itemType));
+            bool alreadyInBoth = Blacklists.GiveAndPickupItemBlacklist.Any(item => MatchesBlacklistSelector(item, isItemId, assetId, isItemId ? (EItemType?)null : itemType));
             if ((category == "give" && (alreadyInGive || alreadyInBoth)) ||
                 (category == "pickup" && (alreadyInPickup || alreadyInBoth)) ||
                 (category == "both" && (alreadyInGive || alreadyInPickup || alreadyInBoth)))
@@ -624,7 +675,9 @@ namespace CCRPPlugin
             List<GiveSoftBlacklist> targetList = category == "give"
                 ? Blacklists.GiveItemBlacklist
                 : category == "pickup" ? Blacklists.PickupItemBlacklist : Blacklists.GiveAndPickupItemBlacklist;
-            GiveSoftBlacklist itemEntry = new GiveSoftBlacklist { Id = assetId, Bypass = bypassPermission };
+            GiveSoftBlacklist itemEntry = isItemId
+                ? new GiveSoftBlacklist { Id = assetId, Bypass = bypassPermission }
+                : new GiveSoftBlacklist { ItemType = itemType.ToString(), Bypass = bypassPermission };
             targetList.Add(itemEntry);
             if (!SaveBlacklistChanges())
             {
@@ -639,12 +692,23 @@ namespace CCRPPlugin
 
         public bool TryRemoveBlacklistEntry(string category, ushort assetId, out string errorKey)
         {
+            return TryRemoveBlacklistEntry(category, assetId.ToString(CultureInfo.InvariantCulture), out errorKey);
+        }
+
+        public bool TryRemoveBlacklistEntry(string category, string selector, out string errorKey)
+        {
             errorKey = null;
             category = category == null ? string.Empty : category.ToLowerInvariant();
 
             if (category == "vehicle")
             {
-                int index = Blacklists.VehicleSpawnBlacklist.FindIndex(vehicle => vehicle.VehicleId == assetId);
+                ushort vehicleId;
+                if (!ushort.TryParse(selector, NumberStyles.None, CultureInfo.InvariantCulture, out vehicleId) || vehicleId == 0)
+                {
+                    errorKey = "BlacklistInvalidId";
+                    return false;
+                }
+                int index = Blacklists.VehicleSpawnBlacklist.FindIndex(vehicle => vehicle.VehicleId == vehicleId);
                 if (index < 0)
                 {
                     errorKey = "BlacklistEntryNotFound";
@@ -682,7 +746,27 @@ namespace CCRPPlugin
                 return false;
             }
 
-            int itemIndex = targetList.FindIndex(item => item.Id == assetId);
+            ushort assetId;
+            EItemType itemType = default(EItemType);
+            bool isItemId = ushort.TryParse(selector, NumberStyles.None, CultureInfo.InvariantCulture, out assetId);
+            if (isItemId && assetId == 0)
+            {
+                errorKey = "BlacklistInvalidId";
+                return false;
+            }
+            if (!isItemId && IsNumericSelector(selector))
+            {
+                errorKey = "BlacklistInvalidId";
+                return false;
+            }
+            if (!isItemId && !TryParseItemType(selector, out itemType))
+            {
+                errorKey = "BlacklistInvalidType";
+                return false;
+            }
+
+            int itemIndex = targetList.FindIndex(item =>
+                MatchesBlacklistSelector(item, isItemId, assetId, isItemId ? (EItemType?)null : itemType));
             if (itemIndex < 0)
             {
                 errorKey = "BlacklistEntryNotFound";
@@ -716,16 +800,127 @@ namespace CCRPPlugin
             }
         }
 
-        private static void AddBypassPermission(Dictionary<ushort, List<string>> index, GiveSoftBlacklist item)
+        private static void AddBypassPermission(
+            Dictionary<ushort, List<string>> idIndex,
+            Dictionary<EItemType, List<string>> typeIndex,
+            GiveSoftBlacklist item)
         {
-            List<string> permissions;
-            if (!index.TryGetValue(item.Id, out permissions))
+            if (item.IsItemTypeEntry)
             {
-                permissions = new List<string>();
-                index.Add(item.Id, permissions);
+                EItemType itemType;
+                if (!TryParseItemType(item.ItemType, out itemType))
+                {
+                    throw new InvalidDataException("Blacklists.json contains an unknown item type.");
+                }
+
+                AddBypassPermission(typeIndex, itemType, item.Bypass);
+                return;
             }
 
-            permissions.Add(item.Bypass);
+            AddBypassPermission(idIndex, item.Id, item.Bypass);
+        }
+
+        private static void AddBypassPermission<TKey>(
+            Dictionary<TKey, List<string>> index,
+            TKey key,
+            string permission)
+        {
+            List<string> permissions;
+            if (!index.TryGetValue(key, out permissions))
+            {
+                permissions = new List<string>();
+                index.Add(key, permissions);
+            }
+
+            permissions.Add(permission);
+        }
+
+        private static bool IsInvalidItemBlacklistEntry(GiveSoftBlacklist item)
+        {
+            if (item == null || string.IsNullOrWhiteSpace(item.Bypass))
+            {
+                return true;
+            }
+
+            if (!item.IsItemTypeEntry)
+            {
+                return false;
+            }
+
+            EItemType itemType;
+            return item.Id != 0 || !TryParseItemType(item.ItemType, out itemType);
+        }
+
+        private static bool TryParseItemType(string value, out EItemType itemType)
+        {
+            if (Enum.TryParse(value, true, out itemType) &&
+                Enum.IsDefined(typeof(EItemType), itemType) &&
+                !IsNumericSelector(value))
+            {
+                return true;
+            }
+
+            itemType = default(EItemType);
+            return false;
+        }
+
+        private static bool IsNumericSelector(string value)
+        {
+            ulong numericValue;
+            return ulong.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out numericValue);
+        }
+
+        private static bool MatchesBlacklistSelector(
+            GiveSoftBlacklist entry,
+            bool isItemId,
+            ushort itemId,
+            EItemType? itemType)
+        {
+            if (entry == null)
+            {
+                return false;
+            }
+
+            if (isItemId)
+            {
+                return !entry.IsItemTypeEntry && entry.Id == itemId;
+            }
+
+            EItemType entryType;
+            return entry.IsItemTypeEntry && TryParseItemType(entry.ItemType, out entryType) && entryType == itemType.Value;
+        }
+
+        private static string FormatItemBlacklistEntry(GiveSoftBlacklist item)
+        {
+            if (item.IsItemTypeEntry)
+            {
+                return $"Type: {item.ItemType} | Bypass: {item.Bypass ?? "NONE"}";
+            }
+
+            return $"ID: {item.Id} | Name: {Assets.find(EAssetType.ITEM, item.Id)?.name ?? "UNKNOWN"} | Bypass: {item.Bypass ?? "NONE"}";
+        }
+
+        public GiveSoftBlacklist FindApplicableItemBlacklistEntry(IEnumerable<GiveSoftBlacklist> entries, ushort itemId)
+        {
+            GiveSoftBlacklist exactEntry = entries.FirstOrDefault(item =>
+                item != null && !item.IsItemTypeEntry && item.Id == itemId);
+            if (exactEntry != null)
+            {
+                return exactEntry;
+            }
+
+            ItemAsset asset = Assets.find(EAssetType.ITEM, itemId) as ItemAsset;
+            if (asset == null)
+            {
+                return null;
+            }
+
+            return entries.FirstOrDefault(item =>
+            {
+                EItemType itemType;
+                return item != null && item.IsItemTypeEntry &&
+                    TryParseItemType(item.ItemType, out itemType) && itemType == asset.type;
+            });
         }
 
         public const string BypassAllPermission = "ccrp.bypass.all";
@@ -740,13 +935,35 @@ namespace CCRPPlugin
 
         public bool IsItemBlockedFromGive(ushort itemId, UnturnedPlayer player)
         {
-            return IsItemBlocked(itemId, player, giveItemBypassPermissions);
+            return IsItemBlocked(itemId, player, giveItemBypassPermissions, giveItemTypeBypassPermissions);
         }
 
-        private static bool IsItemBlocked(ushort itemId, UnturnedPlayer player, Dictionary<ushort, List<string>> index)
+        private bool IsItemBlocked(
+            ushort itemId,
+            UnturnedPlayer player,
+            Dictionary<ushort, List<string>> idIndex,
+            Dictionary<EItemType, List<string>> typeIndex)
         {
             List<string> permissions;
-            return index.TryGetValue(itemId, out permissions) && permissions.Any(permission => !HasBlacklistBypass(player, permission));
+            if (idIndex.TryGetValue(itemId, out permissions) &&
+                IsBlockedByPermissions(permissions, player))
+            {
+                return true;
+            }
+
+            if (typeIndex.Count == 0)
+            {
+                return false;
+            }
+
+            ItemAsset asset = Assets.find(EAssetType.ITEM, itemId) as ItemAsset;
+            return asset != null && typeIndex.TryGetValue(asset.type, out permissions) &&
+                IsBlockedByPermissions(permissions, player);
+        }
+
+        private static bool IsBlockedByPermissions(List<string> permissions, UnturnedPlayer player)
+        {
+            return permissions.Any(permission => player == null || !HasBlacklistBypass(player, permission));
         }
 
         private void OnTakeItemRequested(Player player, byte x, byte y, uint instanceID, byte toX, byte toY, byte toRot, byte toPage, ItemData itemData, ref bool shouldAllow)
@@ -756,14 +973,19 @@ namespace CCRPPlugin
                 return;
             }
 
-            List<string> permissions;
-            if (!pickupItemBypassPermissions.TryGetValue(itemData.item.id, out permissions))
+            bool hasApplicableRule = pickupItemBypassPermissions.ContainsKey(itemData.item.id);
+            if (!hasApplicableRule && pickupItemTypeBypassPermissions.Count > 0)
+            {
+                ItemAsset asset = Assets.find(EAssetType.ITEM, itemData.item.id) as ItemAsset;
+                hasApplicableRule = asset != null && pickupItemTypeBypassPermissions.ContainsKey(asset.type);
+            }
+            if (!hasApplicableRule)
             {
                 return;
             }
 
             UnturnedPlayer unturnedPlayer = UnturnedPlayer.FromPlayer(player);
-            if (unturnedPlayer == null || permissions.Any(permission => !HasBlacklistBypass(unturnedPlayer, permission)))
+            if (IsItemBlocked(itemData.item.id, unturnedPlayer, pickupItemBypassPermissions, pickupItemTypeBypassPermissions))
             {
                 shouldAllow = false;
                 if (unturnedPlayer != null)
@@ -815,6 +1037,7 @@ namespace CCRPPlugin
             TeleportService.Unload();
             ChatFeaturesService.Shutdown();
 
+            UnturnedPlayerEvents.OnPlayerDeath -= OnPlayerDeath;
             UnturnedPlayerEvents.OnPlayerRevive -= OnPlayerRevive;
             U.Events.OnPlayerConnected -= OnPlayerConnected;
             U.Events.OnPlayerDisconnected -= OnPlayerDisconnected;
@@ -1083,7 +1306,7 @@ namespace CCRPPlugin
             { "BypassInvalidName", "Choose a display name between 1 and 24 characters without angle brackets." },
             { "BypassInvalidColor", "Enter a color as six hexadecimal digits, with or without a leading #, such as 33AAFF or #33AAFF." },
             { "BypassGroupAlreadyCreated", "You have already created your one personal bypass group." },
-            { "BypassNoDonationTier", "You need a configured donation group to create a bypass group or claim a bypass." },
+            { "BypassNoDonationTier", "You need a configured donation group to create or customize a bypass group or claim a free bypass." },
             { "BypassGroupSaveFailed", "Your bypass group could not be saved. Please contact an administrator." },
             { "BypassGroupCreated", "Your personal bypass group has been created." },
             { "BypassGroupRequired", "Create your personal bypass group first with /bypassgroup create <display name> <RRGGBB> (the leading # is optional)." },
@@ -1092,6 +1315,28 @@ namespace CCRPPlugin
             { "BypassGroupOwnershipInvalid", "Your personal bypass group membership could not be verified. Please contact an administrator." },
             { "BypassGroupNameUpdated", "Your group display name and prefix have been updated." },
             { "BypassGroupColorUpdated", "Your group color has been updated." },
+            { "BypassShopSyntax", "Use /bypassshop to list offers or /bypassbuy <item|vehicle> <ID> to buy one." },
+            { "BypassCostSyntax", "Use /bypasscost <ID>, or /bypasscost <item|vehicle> <ID> if the ID is offered for both types." },
+            { "BypassShopPlayerOnly", "The bypass shop is only available to players." },
+            { "BypassShopHeader", "Available bypass shop offers (purchase with /bypassbuy <item|vehicle> <ID>):" },
+            { "BypassShopEmpty", "There are no bypass offers available right now." },
+            { "BypassShopOfferUnavailable", "That ID is not currently available in the bypass shop." },
+            { "BypassShopOfferAmbiguous", "That ID matches conflicting blacklist bypass permissions and cannot be sold." },
+            { "BypassShopOfferInvalid", "That bypass shop offer is misconfigured." },
+            { "BypassShopOfferPermissionInvalid", "That blacklist entry has no valid bypass permission and cannot be sold." },
+            { "BypassShopPermissionDenied", "That bypass permission is denied by the donation bypass security list and cannot be sold." },
+            { "BypassShopAlreadyOwned", "You already have the bypass permission. You were not charged." },
+            { "BypassShopAlreadyPurchased", "You already own this bypass. No additional charge was taken." },
+            { "BypassShopInsufficientFunds", "You do not have enough in-game money to buy that bypass." },
+            { "BypassShopEconomyUnavailable", "No supported economy provider is available. Install AdvancedEconomy with UconomyToAdvancedEconomy, or install legacy Uconomy." },
+            { "BypassShopEconomyFailure", "The economy transaction could not be verified. Please try again or contact staff." },
+            { "BypassShopRefundFailed", "The purchase failed and the refund could not be confirmed. Contact staff before trying again." },
+            { "BypassShopPurchaseRecordFailed", "The purchase record could not be saved. Your permission may remain applied and you may have been charged; contact staff before retrying." },
+            { "BypassShopPurchased", "Purchased {0} bypass {1} for {2} in-game money." },
+            { "BypassPurchasedLocked", "You already own this purchased bypass. It cannot be removed through free-claim commands." },
+            { "BypassShopPaidLimitReached", "You have reached the maximum number of paid bypasses allowed." },
+            { "BypassShopCost", "The {0} bypass for ID {1} costs {2} in-game money." },
+            { "BypassShopCostAmbiguous", "That ID is offered for both an item and vehicle. Use /bypasscost <item|vehicle> <ID>." },
             { "BypassItemNotFound", "No item with that ID exists." },
             { "BypassVehicleNotFound", "No vehicle with that ID exists." },
             { "BypassItemNotEligible", "That item is not eligible for a donation bypass." },
@@ -1121,16 +1366,17 @@ namespace CCRPPlugin
             { "BypassAdminAdded", "Added {0} bypass {1} to player {2}'s personal group ({3})." },
             { "BypassAdminRemoved", "Removed {0} bypass {1} from player {2}'s personal group ({3})." },
             { "BypassAdminGroupDeleted", "Deleted player {0}'s personal bypass group. They can create a new one if they qualify." },
-            { "BlacklistCommandSyntax", "Use /blacklist add <give|pickup|both|vehicle> <id> <bypass-permission> or /blacklist remove <give|pickup|both|vehicle> <id>." },
+            { "BlacklistCommandSyntax", "Use /blacklist add <give|pickup|both|vehicle> <id|item-type> <bypass-permission> or /blacklist remove <give|pickup|both|vehicle> <id|item-type>. Vehicles require an ID." },
             { "BlacklistInvalidCategory", "Choose give, pickup, both, or vehicle." },
             { "BlacklistInvalidId", "Enter a valid positive numeric asset ID." },
+            { "BlacklistInvalidType", "Enter a valid Unturned item type name, such as Farm or Grower. Vehicles require an ID." },
             { "BlacklistInvalidBypass", "A bypass permission is required." },
             { "BlacklistAssetNotFound", "No asset with that ID was found for the selected blacklist." },
-            { "BlacklistAlreadyExists", "That asset is already in an overlapping blacklist." },
-            { "BlacklistEntryNotFound", "That asset is not in the selected blacklist." },
+            { "BlacklistAlreadyExists", "That selector is already in an overlapping blacklist." },
+            { "BlacklistEntryNotFound", "That item ID or type is not in the selected blacklist." },
             { "BlacklistSaveFailed", "Could not save Blacklists.json; no change was applied." },
-            { "BlacklistEntryAdded", "Added ID {1} to the {0} blacklist with bypass permission {2}." },
-            { "BlacklistEntryRemoved", "Removed ID {1} from the {0} blacklist." },
+            { "BlacklistEntryAdded", "Added selector {1} to the {0} blacklist with bypass permission {2}." },
+            { "BlacklistEntryRemoved", "Removed selector {1} from the {0} blacklist." },
             { "GiveSyntax", "Please use /give [id] [amount]!" },
             { "VehicleSuccess", "You received the vehicle {0} ({1})!" },
             { "VehicleNotFound", "The vehicle has not been found!" },

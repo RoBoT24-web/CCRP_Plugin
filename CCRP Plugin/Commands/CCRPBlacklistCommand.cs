@@ -3,7 +3,6 @@ using Rocket.API;
 using Rocket.Core.Logging;
 using Rocket.Unturned.Chat;
 using System.Collections.Generic;
-using System.Globalization;
 
 namespace CCRP_Plugin.Commands
 {
@@ -13,9 +12,9 @@ namespace CCRP_Plugin.Commands
 
         public string Name => "blacklist";
 
-        public string Help => "Add or remove an item or vehicle blacklist entry.";
+        public string Help => "Add or remove an item ID, item-type rule, or vehicle blacklist entry.";
 
-        public string Syntax => "add <give|pickup|both|vehicle> <id> <bypass-permission> | remove <give|pickup|both|vehicle> <id>";
+        public string Syntax => "add <give|pickup|both|vehicle> <id|item-type> <bypass-permission> | remove <give|pickup|both|vehicle> <id|item-type>";
 
         public List<string> Aliases => new List<string>();
 
@@ -36,20 +35,13 @@ namespace CCRP_Plugin.Commands
                 return;
             }
 
-            ushort assetId;
-            if (!ushort.TryParse(command[2], NumberStyles.None, CultureInfo.InvariantCulture, out assetId) || assetId == 0)
-            {
-                UnturnedChat.Say(caller, Main.Instance.Translate("BlacklistInvalidId"), Main.Instance.MessageColor);
-                return;
-            }
-
             string errorKey;
-            if (isAdd && !Main.Instance.TryAddBlacklistEntry(command[1], assetId, command[3], out errorKey))
+            if (isAdd && !Main.Instance.TryAddBlacklistEntry(command[1], command[2], command[3], out errorKey))
             {
                 UnturnedChat.Say(caller, Main.Instance.Translate(errorKey), Main.Instance.MessageColor);
                 return;
             }
-            if (isRemove && !Main.Instance.TryRemoveBlacklistEntry(command[1], assetId, out errorKey))
+            if (isRemove && !Main.Instance.TryRemoveBlacklistEntry(command[1], command[2], out errorKey))
             {
                 UnturnedChat.Say(caller, Main.Instance.Translate(errorKey), Main.Instance.MessageColor);
                 return;
@@ -58,13 +50,13 @@ namespace CCRP_Plugin.Commands
             string category = command[1].ToLowerInvariant();
             if (isAdd)
             {
-                UnturnedChat.Say(caller, Main.Instance.Translate("BlacklistEntryAdded", category, assetId, command[3]), Main.Instance.MessageColor);
-                Logger.Log($"{caller.DisplayName} ({caller.Id}) added asset {assetId} to the {category} blacklist with bypass permission {command[3]}.");
+                UnturnedChat.Say(caller, Main.Instance.Translate("BlacklistEntryAdded", category, command[2], command[3]), Main.Instance.MessageColor);
+                Logger.Log($"{caller.DisplayName} ({caller.Id}) added selector {command[2]} to the {category} blacklist with bypass permission {command[3]}.");
             }
             else
             {
-                UnturnedChat.Say(caller, Main.Instance.Translate("BlacklistEntryRemoved", category, assetId), Main.Instance.MessageColor);
-                Logger.Log($"{caller.DisplayName} ({caller.Id}) removed asset {assetId} from the {category} blacklist.");
+                UnturnedChat.Say(caller, Main.Instance.Translate("BlacklistEntryRemoved", category, command[2]), Main.Instance.MessageColor);
+                Logger.Log($"{caller.DisplayName} ({caller.Id}) removed selector {command[2]} from the {category} blacklist.");
             }
         }
     }

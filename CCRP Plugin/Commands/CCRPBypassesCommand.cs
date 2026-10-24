@@ -15,7 +15,7 @@ namespace CCRPPlugin.Commands
         public string Help => "Show your claimed item and vehicle bypasses.";
         public string Syntax => string.Empty;
         public List<string> Aliases => new List<string> { "bypasslist" };
-        public List<string> Permissions => new List<string> { "ccrp.bypasses" };
+        public List<string> Permissions => new List<string> { "ccrp.bypass.shop" };
 
         public void Execute(IRocketPlayer caller, string[] command)
         {

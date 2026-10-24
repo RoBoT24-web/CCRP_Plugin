@@ -260,7 +260,7 @@ namespace CCRPPlugin.Commands
     {
         public AllowedCaller AllowedCaller => AllowedCaller.Player;
         public string Name => "jump";
-        public string Help => "Teleport to the point you are looking at.";
+        public string Help => "Teleport to the point you are looking at, with a small forgiving aim cone.";
         public string Syntax => "";
         public List<string> Aliases => new List<string>();
         public List<string> Permissions => new List<string> { "ccrp.jump" };
@@ -282,10 +282,7 @@ namespace CCRPPlugin.Commands
                 }
 
                 Transform aim = player.Player.look.aim;
-                RaycastInfo hit = DamageTool.raycast(
-                    new Ray(aim.position, aim.forward),
-                    float.PositiveInfinity,
-                    RayMasks.BARRICADE_INTERACT | RayMasks.STRUCTURE_INTERACT);
+                RaycastInfo hit = FindJumpTarget(aim);
                 if (hit == null || hit.transform == null)
                 {
                     UnturnedChat.Say(caller, "No destination found.");
@@ -295,6 +292,107 @@ namespace CCRPPlugin.Commands
                 Vector3 destination = hit.point + Vector3.up;
                 player.Teleport(destination, player.Rotation);
                 UnturnedChat.Say(caller, "Teleported to the point you were looking at.");
+            });
+        }
+
+        private static RaycastInfo FindJumpTarget(Transform aim)
+        {
+            // Small cone is tried first; the larger cone is a fallback.
+            float[] coneAngles = { 1.5f, 5f };
+            Vector3 forward = aim.forward;
+            Vector3 right = aim.right;
+            Vector3 up = aim.up;
+
+            foreach (float coneAngle in coneAngles)
+            {
+                Vector3[] offsets =
+                {
+                    Vector3.zero,
+                    right * coneAngle,
+                    -right * coneAngle,
+                    up * coneAngle,
+                    -up * coneAngle,
+                    (right + up).normalized * coneAngle,
+                    (right - up).normalized * coneAngle,
+                    (-right + up).normalized * coneAngle,
+                    (-right - up).normalized * coneAngle
+                };
+
+                for (int i = 0; i < offsets.Length; i++)
+                {
+                    Vector3 direction = (forward + offsets[i] * Mathf.Deg2Rad).normalized;
+                    RaycastInfo hit = DamageTool.raycast(
+                        new Ray(aim.position, direction),
+                        float.PositiveInfinity,
+                        RayMasks.BARRICADE_INTERACT | RayMasks.STRUCTURE_INTERACT);
+                    if (hit != null && hit.transform != null)
+                    {
+                        return hit;
+                    }
+                }
+            }
+
+            return null;
+        }
+    }
+
+    public sealed class CCRPAscendCommand : IRocketCommand
+    {
+        public AllowedCaller AllowedCaller => AllowedCaller.Player;
+        public string Name => "ascend";
+        public string Help => "Teleport vertically upward by a distance in meters (maximum 1000).";
+        public string Syntax => "<distance>";
+        public List<string> Aliases => new List<string>();
+        public List<string> Permissions => new List<string> { "ccrp.ascend" };
+
+        public void Execute(IRocketPlayer caller, string[] command)
+        {
+            VerticalTeleportCommandSupport.Execute(caller, command, Name, true);
+        }
+    }
+
+    public sealed class CCRPDescendCommand : IRocketCommand
+    {
+        public AllowedCaller AllowedCaller => AllowedCaller.Player;
+        public string Name => "descend";
+        public string Help => "Teleport vertically downward by a distance in meters (maximum 1000).";
+        public string Syntax => "<distance>";
+        public List<string> Aliases => new List<string>();
+        public List<string> Permissions => new List<string> { "ccrp.descend" };
+
+        public void Execute(IRocketPlayer caller, string[] command)
+        {
+            VerticalTeleportCommandSupport.Execute(caller, command, Name, false);
+        }
+    }
+
+    internal static class VerticalTeleportCommandSupport
+    {
+        private const float MaximumDistance = 1000f;
+
+        public static void Execute(IRocketPlayer caller, string[] command, string commandName, bool ascend)
+        {
+            UtilityCommandSupport.ExecuteSafely(caller, commandName, () =>
+            {
+                UnturnedPlayer player = caller as UnturnedPlayer;
+                float distance;
+                if (player == null || command == null || command.Length != 1 ||
+                    !float.TryParse(command[0], NumberStyles.Float, CultureInfo.InvariantCulture, out distance) ||
+                    float.IsNaN(distance) || float.IsInfinity(distance) ||
+                    distance <= 0f || distance > MaximumDistance)
+                {
+                    UnturnedChat.Say(caller, $"Usage: /{commandName} <distance> (greater than 0 and at most 1000 meters)");
+                    return;
+                }
+
+                if (TeleportService.IsBlocked(player))
+                {
+                    return;
+                }
+
+                Vector3 destination = player.Position + Vector3.up * (ascend ? distance : -distance);
+                player.Teleport(destination, player.Rotation);
+                UnturnedChat.Say(caller, $"Teleported {(ascend ? "up" : "down")} {distance.ToString("0.##", CultureInfo.InvariantCulture)} meters.");
             });
         }
     }

@@ -107,22 +107,43 @@ Command and Permission reference for CCRP plugin.
 
 Players can create a personal permission group and claim configured item or vehicle bypass permissions, subject to their donation tiers' combined limit.
 
+All players can also buy permanent bypasses from the administrator-maintained shop list. Purchases are placed in the player's personal Rocket permission group; if they do not have one, the plugin creates a plain group automatically. Shop-only players do not need `/bypassgroup`. If they later qualify for a donation tier, their existing group and purchased permissions are retained, and `/bypassgroup create` can adopt and customize that shop-created group. The command refuses to create a second personal group and reports when one already exists. Paid purchases do not use donor free-claim slots and cannot be removed using player free-claim commands. A bypass already granted by a free claim, another permission group, or `ccrp.bypass.all` cannot be purchased again.
+
+### For all players
+
+Players need `ccrp.bypass.shop` for these shop and listing commands. Grant it to the default/player group in Rocket's permissions configuration for regular player access.
+
 | Command | Description | Permission |
 |---|---|---|
-| `/bypassgroup create <display name> <RRGGBB>` (`/bg`) | Creates your one personal bypass group. The group display name and prefix are set together. The six-digit hex color may optionally start with `#`. | `ccrp.bypassgroup`; requires a configured donation tier |
+| `/bypasses` (`/bypasslist`) | Shows your purchased and claimed item and vehicle bypasses in chat. | `ccrp.bypass.shop` |
+| `/bypassshop` (`/bshop`) | Lists item and vehicle bypass offers currently available for purchase with in-game money. | `ccrp.bypass.shop` |
+| `/bypasscost <ID>` | Shows the price for the listed item or vehicle bypass offer with that ID. If both item and vehicle offers use the ID, specify `item` or `vehicle`. | `ccrp.bypass.shop` |
+| `/bypassbuy <item\|vehicle> <ID>` (`/bbuy`) | Purchases one listed bypass offer with in-game money. | `ccrp.bypass.shop` |
+
+### For donators
+
+These claim and personal-group commands require the listed bypass permission; commands marked with donation-tier eligibility also require a configured donation tier.
+
+| Command | Description | Permission |
+|---|---|---|
+| `/bypassgroup create <display name> <RRGGBB>` (`/bg`) | Creates your one personal bypass group, or adopts and customizes your existing shop-created group. An already-created personal group is not created again. The group display name and prefix are set together. The six-digit hex color may optionally start with `#`. | `ccrp.bypassgroup`; requires a configured donation tier |
 | `/bypassgroup name <display name>` (`/bg`) | Changes your personal group's display name and prefix. | `ccrp.bypassgroup`; requires your personal bypass group |
 | `/bypassgroup color <RRGGBB>` (`/bg`) | Changes your personal group's color. The six-digit hex color may optionally start with `#`. | `ccrp.bypassgroup`; requires your personal bypass group |
-| `/bypasses` (`/bypasslist`) | Shows your claimed item and vehicle bypasses in chat. | `ccrp.bypasses`; requires your personal bypass group |
-| `/bypassadmin list <Steam64ID>` (`/badm`) | Shows the target player's personal-group bypasses in chat. | `ccrp.bypasses.admin` |
-| `/bypassadmin add <Steam64ID> <item\|vehicle> <ID>` | Adds the configured bypass for that item or vehicle to the target player's personal group. | `ccrp.bypasses.admin` |
-| `/bypassadmin remove <Steam64ID> <item\|vehicle> <ID>` | Removes that configured bypass from the target player's personal group. | `ccrp.bypasses.admin` |
-| `/bypassadmin delete <Steam64ID> confirm` | Deletes the target player's personal bypass group and resets their one-time creation record. Requires the literal `confirm`. | `ccrp.bypasses.admin` |
 | `/bypassitem <item ID>` (`/bi`) | Adds an eligible item bypass permission to your personal group. If already in your personal group, starts a removal confirmation. | `ccrp.bypassitem`; requires a configured donation tier and personal bypass group |
 | `/bypassitem confirm` / `/bi confirm`; `/bypassitem cancel` / `/bi cancel` | Confirms or cancels a pending item bypass removal. Confirmation expires after 30 seconds. | `ccrp.bypassitem` |
 | `/bypassvehicle <vehicle ID>` (`/bv`) | Adds an eligible vehicle bypass permission to your personal group. If already in your personal group, starts a removal confirmation. | `ccrp.bypassvehicle`; requires a configured donation tier and personal bypass group |
 | `/bypassvehicle confirm` / `/bv confirm`; `/bypassvehicle cancel` / `/bv cancel` | Confirms or cancels a pending vehicle bypass removal. Confirmation expires after 30 seconds. | `ccrp.bypassvehicle` |
 
-Configure `<DonationBypasses>` in `CCRP Plugin.configuration.xml`. `<Tiers>` is a list of donation permission group IDs, highest tier first; each `<Tier GroupId="..." MaxBypasses="..."/>` sets that tier's bypass allowance. A player's total claim limit is the sum of `MaxBypasses` for every configured tier group they belong to. The first matching tier in the list is used as the personal group's parent. For example, a player in both configured groups below can claim up to 7 distinct bypasses (5 + 2):
+### For admins
+
+| Command | Description | Permission |
+|---|---|---|
+| `/bypassadmin list <Steam64ID>` (`/badm`) | Shows the target player's personal-group bypasses in chat. | `ccrp.bypasses.admin` |
+| `/bypassadmin add <Steam64ID> <item\|vehicle> <ID>` | Adds the configured bypass for that item or vehicle to the target player's personal group. | `ccrp.bypasses.admin` |
+| `/bypassadmin remove <Steam64ID> <item\|vehicle> <ID>` | Removes that configured bypass from the target player's personal group. | `ccrp.bypasses.admin` |
+| `/bypassadmin delete <Steam64ID> confirm` | Deletes the target player's personal bypass group and resets their one-time creation record. Requires the literal `confirm`. | `ccrp.bypasses.admin` |
+
+Configure `<DonationBypasses>` in `CCRP Plugin.configuration.xml`. `<Tiers>` is a list of donation permission group IDs, highest tier first; each `<Tier GroupId="..." MaxBypasses="..."/>` sets that tier's bypass allowance. A player's total claim limit is the sum of `MaxBypasses` for every configured tier group they belong to. The first matching tier in the list is used as the personal group's parent. For example, a player in both configured groups below can claim up to 7 distinct free bypasses (5 + 2):
 
 ```xml
 <DonationBypasses>
@@ -134,16 +155,32 @@ Configure `<DonationBypasses>` in `CCRP Plugin.configuration.xml`. `<Tiers>` is 
     <Permission>bypass.invis</Permission>
     <Permission>bypass.glitched</Permission>
   </DeniedPermissions>
+  <MaxPaidBypasses>5</MaxPaidBypasses>
 </DonationBypasses>
 ```
 
+`MaxPaidBypasses` limits each player to this many distinct paid bypass permissions, separately from donor free claims. It defaults to 5; set it to `0` to disable paid bypass purchases. A bypass already granted through donation or another permission group does not count as a paid purchase.
+
 Claimable items come only from `GiveAndPickupItemBlacklist`; IDs present in either `GiveItemBlacklist` or `PickupItemBlacklist` are always excluded. Claimable vehicles come from `VehicleSpawnBlacklist`. Each entry has its own bypass permission, and `DeniedPermissions` excludes exact matching permission names (case-insensitive) from either category; it does not support prefixes or wildcards. For example, denying `ex.bypass` does not deny `ex.bypass.36547`; list every full permission you want excluded.
+
+The shop catalog is stored separately in `Data\BypassShop.json` and is created with an empty offer list if it does not exist. Add offers using this format; `Type` is `Item` or `Vehicle`, `AssetId` is an Unturned ID, and `Cost` is a positive in-game-money amount with at most two decimal places:
+
+```json
+{
+  "Offers": [
+    { "Type": "Item", "AssetId": 363, "Cost": 1000.00 },
+    { "Type": "Vehicle", "AssetId": 123, "Cost": 5000.00 }
+  ]
+}
+```
+
+Each offer is checked against `Data\Blacklists.json` when listed or purchased. An item ID must resolve to one unambiguous bypass permission across active item blacklist entries; conflicting permissions make that offer unavailable. Vehicles are matched by exact vehicle ID. Permissions listed in `<DonationBypasses><DeniedPermissions>` cannot be sold. Purchased ownership is tracked by Steam64 ID in `Data\BypassPurchases.json`; do not edit that file manually. Use `/bypasscost <ID>` to check a price before purchase; when the same ID is offered for both an item and vehicle, specify `item` or `vehicle` in the command.
+
+The shop uses the AdvancedEconomy API when available and falls back to the legacy Uconomy API. For AdvancedEconomy installations, install its Uconomy compatibility bridge (`UconomyToAdvancedEconomy`) if the direct API is not exposed. The plugin reports an error instead of charging players when no supported provider is available or a balance change cannot be verified.
 
 The item/vehicle claim commands take numeric IDs and use distinct aliases. Claimed item and vehicle bypasses share the combined tier allowance. Re-entering an ID already in your personal group prompts you to confirm removal; confirmation removes only that personal-group permission. Item and vehicle confirmations are separate, and a bypass inherited from another permission group cannot be removed this way (that group may continue granting it). Group colors use six hexadecimal digits, with or without a leading `#` (for example, `33AAFF` or `#33AAFF`); group display names are limited to 24 characters and cannot contain angle brackets. Each player's one-time group creation is recorded in `DonationBypassGroups.json`.
 
-Staff can use `/bypassadmin` to manage registered CCRP personal bypass groups by the owner's Steam64 ID. Add/remove takes an item or vehicle ID from the configured blacklists; list shows configured bypass items and vehicles. Deletion removes the personal group and clears the creation record, allowing the player to create a new group later if eligible. These actions do not edit unrelated Rocket permission groups.
-
-To log bypass command invocations to Discord, set `<Bypass>` under `<Webhooks>` in `CCRP Plugin.configuration.xml` to a Discord webhook URL. Logs include the player, entered command, and outcome (success, invalid syntax, or the failure message, such as an already-owned bypass).
+To log bypass command invocations to Discord, set `<Bypass>` under `<Webhooks>` in `CCRP Plugin.configuration.xml` to a Discord webhook URL. Logs include the player, entered command, and outcome.
 
 ## Wrecking Ball
 

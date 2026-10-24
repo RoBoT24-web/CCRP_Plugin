@@ -85,6 +85,9 @@
     <Compile Include="Commands\CCRPBypassGroupCommand.cs" />
     <Compile Include="Commands\CCRPBypassItemCommand.cs" />
     <Compile Include="Commands\CCRPBypassVehicleCommand.cs" />
+    <Compile Include="Commands\CCRPBypassShopCommand.cs" />
+    <Compile Include="Commands\CCRPBypassBuyCommand.cs" />
+    <Compile Include="Commands\CCRPBypassCostCommand.cs" />
     <Compile Include="Commands\CCRPBypassesCommand.cs" />
     <Compile Include="Commands\CCRPBypassAdminCommand.cs" />
     <Compile Include="Commands\CommandExceptionHandler.cs" />
@@ -133,12 +136,14 @@
     <Compile Include="Models\GiveSoftBlacklist.cs" />
     <Compile Include="Models\BlacklistSettings.cs" />
     <Compile Include="Models\BypassGroupRegistry.cs" />
+    <Compile Include="Models\BypassShopModels.cs" />
     <Compile Include="Models\ChatFeatureSettings.cs" />
     <Compile Include="Models\Playtime.cs" />
     <Compile Include="Models\VehicleSpawnBlacklist.cs" />
     <Compile Include="Services\MaxSkillsService.cs" />
     <Compile Include="Services\PlaytimeService.cs" />
     <Compile Include="Services\DonationBypassService.cs" />
+    <Compile Include="Services\EconomyService.cs" />
     <Compile Include="Services\ChatFeaturesService.cs" />
     <Compile Include="Services\DeathLocationService.cs" />
     <Compile Include="Services\ItemFeaturesService.cs" />

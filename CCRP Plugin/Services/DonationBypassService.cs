@@ -8,6 +8,7 @@ using Rocket.Unturned.Player;
 using SDG.Unturned;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -25,6 +26,12 @@ namespace CCRP_Plugin.Services
         private readonly Main plugin;
         private readonly DataStorage<BypassGroupRegistry> registryStorage;
         private readonly BypassGroupRegistry registry;
+        private readonly DataStorage<BypassShopCatalog> shopCatalogStorage;
+        private readonly BypassShopCatalog shopCatalog;
+        private readonly DataStorage<BypassPurchaseRegistry> purchaseStorage;
+        private readonly BypassPurchaseRegistry purchaseRegistry;
+        private readonly EconomyService economyService = new EconomyService();
+        private readonly object purchaseLock = new object();
         private readonly Dictionary<string, PendingBypassRemoval> pendingBypassRemovals =
             new Dictionary<string, PendingBypassRemoval>(StringComparer.OrdinalIgnoreCase);
 
@@ -32,6 +39,8 @@ namespace CCRP_Plugin.Services
         {
             this.plugin = plugin;
             registryStorage = new DataStorage<BypassGroupRegistry>(plugin.DataDirectory, "DonationBypassGroups.json", Newtonsoft.Json.Formatting.Indented);
+            shopCatalogStorage = new DataStorage<BypassShopCatalog>(plugin.DataDirectory, "BypassShop.json", Newtonsoft.Json.Formatting.Indented);
+            purchaseStorage = new DataStorage<BypassPurchaseRegistry>(plugin.DataDirectory, "BypassPurchases.json", Newtonsoft.Json.Formatting.Indented);
 
             try
             {
@@ -43,13 +52,77 @@ namespace CCRP_Plugin.Services
                 }
 
                 registry = savedRegistry ?? new BypassGroupRegistry();
+                if (registry.ShopCreatedPlayerIds == null)
+                {
+                    registry.ShopCreatedPlayerIds = new List<string>();
+                }
+
+                BypassShopCatalog savedCatalog = shopCatalogStorage.Read();
+                if (savedCatalog == null && File.Exists(shopCatalogStorage.DataPath))
+                {
+                    throw new InvalidDataException("BypassShop.json could not be read.");
+                }
+
+                shopCatalog = savedCatalog ?? new BypassShopCatalog();
+                if (shopCatalog.Offers == null)
+                {
+                    throw new InvalidDataException("BypassShop.json is missing its offers collection.");
+                }
+
+                BypassPurchaseRegistry savedPurchases = purchaseStorage.Read();
+                if (savedPurchases == null && File.Exists(purchaseStorage.DataPath))
+                {
+                    throw new InvalidDataException("BypassPurchases.json could not be read.");
+                }
+
+                purchaseRegistry = savedPurchases ?? new BypassPurchaseRegistry();
+                if (purchaseRegistry.Purchases == null)
+                {
+                    throw new InvalidDataException("BypassPurchases.json is missing its purchases collection.");
+                }
+
+                if (savedCatalog == null)
+                {
+                    shopCatalogStorage.Save(shopCatalog);
+                }
+                if (savedPurchases == null)
+                {
+                    purchaseStorage.Save(purchaseRegistry);
+                }
+                ValidateShopCatalog();
             }
             catch (Exception exception)
             {
-                Logger.LogError("Failed to read DonationBypassGroups.json: " + exception.Message);
-                throw new InvalidDataException("Could not load the donation bypass group registry.", exception);
+                Logger.LogError("Failed to load donation bypass shop data: " + exception.Message);
+                throw new InvalidDataException("Could not load donation bypass data.", exception);
             }
 
+        }
+
+        private void ValidateShopCatalog()
+        {
+            foreach (BypassShopOffer offer in shopCatalog.Offers)
+            {
+                if (offer == null)
+                {
+                    Logger.LogError("BypassShop.json contains a null offer; it will not be available.");
+                    continue;
+                }
+
+                if (FindShopOffers(offer.Type, offer.AssetId).Count != 1)
+                {
+                    Logger.LogError($"BypassShop.json contains a duplicate offer for {offer.Type} ID {offer.AssetId}; it will not be available.");
+                    continue;
+                }
+
+                string permission;
+                string assetName;
+                string errorKey;
+                if (!TryResolveShopOffer(offer, out permission, out assetName, out errorKey))
+                {
+                    Logger.LogError($"BypassShop offer {offer.Type} ID {offer.AssetId} is unavailable: {errorKey}.");
+                }
+            }
         }
 
         public bool TryCreateGroup(UnturnedPlayer player, string displayName, string color, out string errorKey)
@@ -67,16 +140,66 @@ namespace CCRP_Plugin.Services
                 return false;
             }
 
-            if (WasCreated(player.Id) || R.Permissions.GetGroup(GetPersonalGroupId(player)) != null)
-            {
-                errorKey = "BypassGroupAlreadyCreated";
-                return false;
-            }
-
             DonationBypassTier tier = GetHighestTier(player);
             if (tier == null)
             {
                 errorKey = "BypassNoDonationTier";
+                return false;
+            }
+
+            if (WasCreated(player.Id) && IsShopCreated(player.Id))
+            {
+                RocketPermissionsGroup existingGroup = GetOwnedGroup(player, out errorKey);
+                if (existingGroup == null)
+                {
+                    return false;
+                }
+
+                string previousDisplayName = existingGroup.DisplayName;
+                string previousPrefix = existingGroup.Prefix;
+                string previousColor = existingGroup.Color;
+                string previousParentGroup = existingGroup.ParentGroup;
+                List<Permission> previousPermissions = new List<Permission>(existingGroup.Permissions);
+                AddPurchasedPermissions(player.Id, existingGroup.Permissions);
+                existingGroup.DisplayName = displayName.Trim();
+                existingGroup.Prefix = displayName.Trim();
+                existingGroup.Color = color;
+                existingGroup.ParentGroup = tier.GroupId;
+                if (!SaveGroup(existingGroup))
+                {
+                    existingGroup.DisplayName = previousDisplayName;
+                    existingGroup.Prefix = previousPrefix;
+                    existingGroup.Color = previousColor;
+                    existingGroup.ParentGroup = previousParentGroup;
+                    existingGroup.Permissions = previousPermissions;
+                    errorKey = "BypassGroupSaveFailed";
+                    return false;
+                }
+
+                registry.ShopCreatedPlayerIds.RemoveAll(id =>
+                    string.Equals(id, player.Id, StringComparison.OrdinalIgnoreCase));
+                if (!TrySaveRegistry())
+                {
+                    registry.ShopCreatedPlayerIds.Add(player.Id);
+                    existingGroup.DisplayName = previousDisplayName;
+                    existingGroup.Prefix = previousPrefix;
+                    existingGroup.Color = previousColor;
+                    existingGroup.ParentGroup = previousParentGroup;
+                    existingGroup.Permissions = previousPermissions;
+                    if (!SaveGroup(existingGroup))
+                    {
+                        Logger.LogError($"Could not roll back group metadata for {existingGroup.Id} after registry save failed.");
+                    }
+                    errorKey = "BypassGroupSaveFailed";
+                    return false;
+                }
+
+                return true;
+            }
+
+            if (WasCreated(player.Id) || R.Permissions.GetGroup(GetPersonalGroupId(player)) != null)
+            {
+                errorKey = "BypassGroupAlreadyCreated";
                 return false;
             }
 
@@ -90,6 +213,7 @@ namespace CCRP_Plugin.Services
                 Members = new List<string> { player.Id },
                 Permissions = new List<Permission>()
             };
+            AddPurchasedPermissions(player.Id, group.Permissions);
 
             RocketPermissionsProviderResult result = R.Permissions.AddGroup(group);
             if (result != RocketPermissionsProviderResult.Success)
@@ -126,6 +250,13 @@ namespace CCRP_Plugin.Services
         public bool TrySetGroupName(UnturnedPlayer player, string displayName, out string errorKey)
         {
             errorKey = null;
+            DonationBypassTier tier = GetHighestTier(player);
+            if (tier == null)
+            {
+                errorKey = "BypassNoDonationTier";
+                return false;
+            }
+
             if (!IsValidDisplayName(displayName))
             {
                 errorKey = "BypassInvalidName";
@@ -140,12 +271,18 @@ namespace CCRP_Plugin.Services
 
             string previousDisplayName = group.DisplayName;
             string previousPrefix = group.Prefix;
+            string previousParentGroup = group.ParentGroup;
             group.DisplayName = displayName.Trim();
             group.Prefix = displayName.Trim();
+            if (IsShopCreated(player.Id))
+            {
+                group.ParentGroup = tier.GroupId;
+            }
             if (!SaveGroup(group))
             {
                 group.DisplayName = previousDisplayName;
                 group.Prefix = previousPrefix;
+                group.ParentGroup = previousParentGroup;
                 errorKey = "BypassGroupSaveFailed";
                 return false;
             }
@@ -156,6 +293,13 @@ namespace CCRP_Plugin.Services
         public bool TrySetGroupColor(UnturnedPlayer player, string color, out string errorKey)
         {
             errorKey = null;
+            DonationBypassTier tier = GetHighestTier(player);
+            if (tier == null)
+            {
+                errorKey = "BypassNoDonationTier";
+                return false;
+            }
+
             if (!TryNormalizeColor(color, out color))
             {
                 errorKey = "BypassInvalidColor";
@@ -169,10 +313,16 @@ namespace CCRP_Plugin.Services
             }
 
             string previousColor = group.Color;
+            string previousParentGroup = group.ParentGroup;
             group.Color = color;
+            if (IsShopCreated(player.Id))
+            {
+                group.ParentGroup = tier.GroupId;
+            }
             if (!SaveGroup(group))
             {
                 group.Color = previousColor;
+                group.ParentGroup = previousParentGroup;
                 errorKey = "BypassGroupSaveFailed";
                 return false;
             }
@@ -189,8 +339,9 @@ namespace CCRP_Plugin.Services
                 return false;
             }
 
-            GiveSoftBlacklist entry = (plugin.Blacklists.GiveAndPickupItemBlacklist ?? new List<GiveSoftBlacklist>())
-                .FirstOrDefault(item => item != null && item.Id == itemId);
+            GiveSoftBlacklist entry = plugin.FindApplicableItemBlacklistEntry(
+                plugin.Blacklists.GiveAndPickupItemBlacklist ?? new List<GiveSoftBlacklist>(),
+                itemId);
             if (entry == null)
             {
                 errorKey = "BypassItemNotEligible";
@@ -222,6 +373,23 @@ namespace CCRP_Plugin.Services
 
         public List<string> GetPlayerBypasses(UnturnedPlayer player, out string errorKey)
         {
+            if (HasAnyPurchase(player.Id))
+            {
+                RocketPermissionsGroup purchasedGroup;
+                if (!TryGetOrCreateShopGroup(player, out purchasedGroup, out errorKey))
+                {
+                    return null;
+                }
+
+                return GetBypasses(purchasedGroup);
+            }
+
+            if (!WasCreated(player.Id))
+            {
+                errorKey = null;
+                return new List<string>();
+            }
+
             return GetPersonalGroupBypasses(player.Id, out errorKey);
         }
 
@@ -242,10 +410,10 @@ namespace CCRP_Plugin.Services
             errorKey = null;
             if (string.Equals(type, "item", StringComparison.OrdinalIgnoreCase))
             {
-                GiveSoftBlacklist entry = (plugin.Blacklists.GiveAndPickupItemBlacklist ?? new List<GiveSoftBlacklist>())
+                IEnumerable<GiveSoftBlacklist> entries = (plugin.Blacklists.GiveAndPickupItemBlacklist ?? new List<GiveSoftBlacklist>())
                     .Concat(plugin.Blacklists.GiveItemBlacklist ?? new List<GiveSoftBlacklist>())
-                    .Concat(plugin.Blacklists.PickupItemBlacklist ?? new List<GiveSoftBlacklist>())
-                    .FirstOrDefault(item => item != null && item.Id == assetId);
+                    .Concat(plugin.Blacklists.PickupItemBlacklist ?? new List<GiveSoftBlacklist>());
+                GiveSoftBlacklist entry = plugin.FindApplicableItemBlacklistEntry(entries, assetId);
                 bypassPermission = entry?.Bypass;
             }
             else if (string.Equals(type, "vehicle", StringComparison.OrdinalIgnoreCase))
@@ -267,6 +435,271 @@ namespace CCRP_Plugin.Services
             }
 
             return true;
+        }
+
+        public List<string> GetShopOfferLines()
+        {
+            List<string> lines = new List<string>();
+            foreach (BypassShopOffer offer in shopCatalog.Offers
+                .Where(item => item != null)
+                .OrderBy(item => item.Type, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(item => item.AssetId))
+            {
+                List<BypassShopOffer> matchingOffers = FindShopOffers(offer.Type, offer.AssetId);
+                if (matchingOffers.Count != 1 || !ReferenceEquals(matchingOffers[0], offer))
+                {
+                    continue;
+                }
+
+                string bypassPermission;
+                string assetName;
+                string errorKey;
+                if (!TryResolveShopOffer(offer, out bypassPermission, out assetName, out errorKey))
+                {
+                    continue;
+                }
+
+                lines.Add(string.Format(
+                    CultureInfo.InvariantCulture,
+                    "{0}: {1} ({2}) - {3}",
+                    offer.Type,
+                    assetName,
+                    offer.AssetId,
+                    offer.Cost.ToString("0.##", CultureInfo.InvariantCulture)));
+            }
+
+            return lines;
+        }
+
+        public bool TryGetShopCost(string type, ushort assetId, out decimal cost, out string offerType, out string errorKey)
+        {
+            cost = 0;
+            offerType = null;
+            errorKey = null;
+            List<BypassShopOffer> offers = shopCatalog.Offers
+                .Where(offer => offer != null &&
+                    offer.AssetId == assetId &&
+                    (string.IsNullOrWhiteSpace(type) ||
+                     string.Equals(offer.Type, type, StringComparison.OrdinalIgnoreCase)))
+                .ToList();
+            if (offers.Count == 0)
+            {
+                errorKey = "BypassShopOfferUnavailable";
+                return false;
+            }
+            List<BypassShopOffer> validOffers = new List<BypassShopOffer>();
+            foreach (BypassShopOffer offer in offers)
+            {
+                string permission;
+                string assetName;
+                string offerError;
+                if (TryResolveShopOffer(offer, out permission, out assetName, out offerError))
+                {
+                    validOffers.Add(offer);
+                }
+            }
+
+            if (validOffers.Count == 0)
+            {
+                errorKey = "BypassShopOfferUnavailable";
+                return false;
+            }
+            if (validOffers.Count != 1)
+            {
+                errorKey = "BypassShopOfferAmbiguous";
+                return false;
+            }
+
+            cost = validOffers[0].Cost;
+            offerType = validOffers[0].Type;
+            return true;
+        }
+
+        public bool TryPurchase(
+            UnturnedPlayer player,
+            string type,
+            ushort assetId,
+            out decimal cost,
+            out bool alreadyOwned,
+            out string errorKey)
+        {
+            cost = 0;
+            alreadyOwned = false;
+            errorKey = null;
+            if (player == null)
+            {
+                errorKey = "BypassShopPlayerOnly";
+                return false;
+            }
+
+            lock (purchaseLock)
+            {
+                List<BypassShopOffer> offers = FindShopOffers(type, assetId);
+                if (offers.Count == 0)
+                {
+                    errorKey = "BypassShopOfferUnavailable";
+                    return false;
+                }
+                if (offers.Count != 1)
+                {
+                    errorKey = "BypassShopOfferAmbiguous";
+                    return false;
+                }
+
+                BypassShopOffer offer = offers[0];
+                cost = offer.Cost;
+                string bypassPermission;
+                string assetName;
+                if (!TryResolveShopOffer(offer, out bypassPermission, out assetName, out errorKey))
+                {
+                    return false;
+                }
+
+                if (HasPurchasedPermission(player.Id, bypassPermission))
+                {
+                    RocketPermissionsGroup ownedGroup;
+                    if (!TryGetOrCreateShopGroup(player, out ownedGroup, out errorKey))
+                    {
+                        return false;
+                    }
+
+                    if (!HasGroupPermission(ownedGroup, bypassPermission))
+                    {
+                        ownedGroup.Permissions.Add(new Permission(bypassPermission, 0));
+                        if (!SaveGroup(ownedGroup))
+                        {
+                            ownedGroup.Permissions.RemoveAll(permission =>
+                                permission != null &&
+                                string.Equals(permission.Name, bypassPermission, StringComparison.OrdinalIgnoreCase));
+                            errorKey = "BypassGroupSaveFailed";
+                            return false;
+                        }
+                    }
+
+                    alreadyOwned = true;
+                    return true;
+                }
+
+                if (Main.HasBlacklistBypass(player, bypassPermission))
+                {
+                    errorKey = "BypassShopAlreadyOwned";
+                    return false;
+                }
+
+                int purchasedCount = GetPurchasedPermissions(player.Id).Count;
+                if (purchasedCount >= plugin.PluginConfiguration.DonationBypasses.MaxPaidBypasses)
+                {
+                    errorKey = "BypassShopPaidLimitReached";
+                    return false;
+                }
+
+                decimal balance;
+                if (!economyService.TryGetBalance(player.Id, out balance, out errorKey))
+                {
+                    return false;
+                }
+                if (balance < offer.Cost)
+                {
+                    errorKey = "BypassShopInsufficientFunds";
+                    return false;
+                }
+
+                RocketPermissionsGroup group;
+                if (!TryGetOrCreateShopGroup(player, out group, out errorKey))
+                {
+                    return false;
+                }
+                if (HasGroupPermission(group, bypassPermission))
+                {
+                    errorKey = "BypassShopAlreadyOwned";
+                    return false;
+                }
+
+                decimal previousBalance;
+                decimal currentBalance;
+                if (!economyService.TryChangeBalance(
+                    player.Id,
+                    -offer.Cost,
+                    out previousBalance,
+                    out currentBalance,
+                    out errorKey))
+                {
+                    if (currentBalance != previousBalance &&
+                        !TryRefund(player.Id, previousBalance - currentBalance))
+                    {
+                        errorKey = "BypassShopRefundFailed";
+                    }
+                    return false;
+                }
+
+                Permission purchasedPermission = new Permission(bypassPermission, 0);
+                group.Permissions.Add(purchasedPermission);
+                if (!SaveGroup(group))
+                {
+                    group.Permissions.Remove(purchasedPermission);
+                    if (!TryRefund(player.Id, offer.Cost))
+                    {
+                        errorKey = "BypassShopRefundFailed";
+                    }
+                    else
+                    {
+                        errorKey = "BypassGroupSaveFailed";
+                    }
+                    return false;
+                }
+
+                BypassPurchase purchase = new BypassPurchase
+                {
+                    PlayerId = player.Id,
+                    Type = offer.Type,
+                    AssetId = offer.AssetId,
+                    BypassPermission = bypassPermission,
+                    Cost = offer.Cost,
+                    PurchasedAtUtc = DateTime.UtcNow
+                };
+                purchaseRegistry.Purchases.Add(purchase);
+                if (!TrySavePurchaseRegistry())
+                {
+                    purchaseRegistry.Purchases.Remove(purchase);
+                    group.Permissions.Remove(purchasedPermission);
+                    bool permissionRolledBack = SaveGroup(group);
+                    if (!permissionRolledBack)
+                    {
+                        group.Permissions.Add(purchasedPermission);
+                        purchaseRegistry.Purchases.Add(purchase);
+                        if (SaveGroup(group) && TrySavePurchaseRegistry())
+                        {
+                            Logger.LogWarning($"Completed bypass purchase for {player.Id} after the initial purchase record save failed.");
+                            return true;
+                        }
+
+                        Logger.LogError($"Could not reliably persist paid bypass permission {bypassPermission} for {player.Id} after the purchase record save failed.");
+                        errorKey = "BypassShopPurchaseRecordFailed";
+                        return false;
+                    }
+
+                    if (TryRefund(player.Id, offer.Cost))
+                    {
+                        errorKey = "BypassShopPurchaseRecordFailed";
+                        return false;
+                    }
+
+                    group.Permissions.Add(purchasedPermission);
+                    purchaseRegistry.Purchases.Add(purchase);
+                    bool permissionRestored = SaveGroup(group);
+                    bool recordRestored = TrySavePurchaseRegistry();
+                    if (permissionRestored && recordRestored)
+                    {
+                        Logger.LogWarning($"Completed bypass purchase for {player.Id} because the charge could not be refunded.");
+                        return true;
+                    }
+
+                    errorKey = "BypassShopRefundFailed";
+                    return false;
+                }
+
+                return true;
+            }
         }
 
         public bool TryAdminAddBypass(string playerId, string bypassPermission, out string errorKey)
@@ -363,11 +796,17 @@ namespace CCRP_Plugin.Services
             List<string> createdPlayerIds = registry.CreatedPlayerIds
                 .Where(id => string.Equals(id, playerId, StringComparison.OrdinalIgnoreCase))
                 .ToList();
+            List<string> shopCreatedPlayerIds = registry.ShopCreatedPlayerIds
+                .Where(id => string.Equals(id, playerId, StringComparison.OrdinalIgnoreCase))
+                .ToList();
             registry.CreatedPlayerIds.RemoveAll(id =>
+                string.Equals(id, playerId, StringComparison.OrdinalIgnoreCase));
+            registry.ShopCreatedPlayerIds.RemoveAll(id =>
                 string.Equals(id, playerId, StringComparison.OrdinalIgnoreCase));
             if (!TrySaveRegistry())
             {
                 registry.CreatedPlayerIds.AddRange(createdPlayerIds);
+                registry.ShopCreatedPlayerIds.AddRange(shopCreatedPlayerIds);
                 try
                 {
                     RocketPermissionsProviderResult restoreResult = R.Permissions.AddGroup(group);
@@ -465,6 +904,12 @@ namespace CCRP_Plugin.Services
                 return;
             }
 
+            if (item.IsItemTypeEntry)
+            {
+                bypasses.Add($"Item type: {item.ItemType}");
+                return;
+            }
+
             ItemAsset asset = Assets.find(EAssetType.ITEM, item.Id) as ItemAsset;
             bypasses.Add($"Item: {asset?.itemName ?? "Unknown"} ({item.Id})");
         }
@@ -487,6 +932,385 @@ namespace CCRP_Plugin.Services
         public bool TryCancelVehicleRemoval(UnturnedPlayer player)
         {
             return TryCancelRemoval(player, BypassType.Vehicle);
+        }
+
+        private List<BypassShopOffer> FindShopOffers(string type, ushort assetId)
+        {
+            return shopCatalog.Offers
+                .Where(offer => offer != null &&
+                    offer.AssetId == assetId &&
+                    string.Equals(offer.Type, type, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
+        private bool TryResolveShopOffer(
+            BypassShopOffer offer,
+            out string bypassPermission,
+            out string assetName,
+            out string errorKey)
+        {
+            bypassPermission = null;
+            assetName = null;
+            errorKey = null;
+            if (offer == null || offer.AssetId == 0 || offer.Cost <= 0 ||
+                decimal.Round(offer.Cost, 2) != offer.Cost)
+            {
+                errorKey = "BypassShopOfferInvalid";
+                return false;
+            }
+
+            if (string.Equals(offer.Type, "item", StringComparison.OrdinalIgnoreCase))
+            {
+                ItemAsset asset = Assets.find(EAssetType.ITEM, offer.AssetId) as ItemAsset;
+                if (asset == null)
+                {
+                    errorKey = "BypassShopOfferUnavailable";
+                    return false;
+                }
+
+                assetName = asset.itemName;
+                IEnumerable<GiveSoftBlacklist> entries =
+                    (plugin.Blacklists.GiveAndPickupItemBlacklist ?? new List<GiveSoftBlacklist>())
+                    .Concat(plugin.Blacklists.GiveItemBlacklist ?? new List<GiveSoftBlacklist>())
+                    .Concat(plugin.Blacklists.PickupItemBlacklist ?? new List<GiveSoftBlacklist>());
+                List<string> permissions = new List<string>();
+                foreach (GiveSoftBlacklist entry in entries)
+                {
+                    if (entry == null)
+                    {
+                        continue;
+                    }
+
+                    bool applies = entry.IsItemTypeEntry
+                        ? plugin.FindApplicableItemBlacklistEntry(new[] { entry }, offer.AssetId) != null
+                        : entry.Id == offer.AssetId;
+                    if (!applies)
+                    {
+                        continue;
+                    }
+                    if (string.IsNullOrWhiteSpace(entry.Bypass))
+                    {
+                        errorKey = "BypassShopOfferPermissionInvalid";
+                        return false;
+                    }
+
+                    permissions.Add(entry.Bypass);
+                }
+
+                List<string> uniquePermissions = permissions
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                if (uniquePermissions.Count == 0)
+                {
+                    errorKey = "BypassShopOfferUnavailable";
+                    return false;
+                }
+                if (uniquePermissions.Count != 1)
+                {
+                    errorKey = "BypassShopOfferAmbiguous";
+                    return false;
+                }
+
+                bypassPermission = uniquePermissions[0];
+            }
+            else if (string.Equals(offer.Type, "vehicle", StringComparison.OrdinalIgnoreCase))
+            {
+                VehicleAsset asset = Assets.find(EAssetType.VEHICLE, offer.AssetId) as VehicleAsset;
+                if (asset == null)
+                {
+                    errorKey = "BypassShopOfferUnavailable";
+                    return false;
+                }
+
+                assetName = asset.vehicleName;
+                List<string> permissions = (plugin.Blacklists.VehicleSpawnBlacklist ?? new List<VehicleSpawnBlacklist>())
+                    .Where(vehicle => vehicle != null && vehicle.VehicleId == offer.AssetId)
+                    .Select(vehicle => vehicle.Bypass)
+                    .ToList();
+                if (permissions.Any(string.IsNullOrWhiteSpace))
+                {
+                    errorKey = "BypassShopOfferPermissionInvalid";
+                    return false;
+                }
+
+                List<string> uniquePermissions = permissions
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                if (uniquePermissions.Count == 0)
+                {
+                    errorKey = "BypassShopOfferUnavailable";
+                    return false;
+                }
+                if (uniquePermissions.Count != 1)
+                {
+                    errorKey = "BypassShopOfferAmbiguous";
+                    return false;
+                }
+
+                bypassPermission = uniquePermissions[0];
+            }
+            else
+            {
+                errorKey = "BypassShopOfferInvalid";
+                return false;
+            }
+
+            if (!IsAllowedPermission(bypassPermission))
+            {
+                errorKey = "BypassShopPermissionDenied";
+                return false;
+            }
+
+            return true;
+        }
+
+        private bool TryGetOrCreateShopGroup(
+            UnturnedPlayer player,
+            out RocketPermissionsGroup group,
+            out string errorKey)
+        {
+            errorKey = null;
+            group = null;
+            string groupId = GetPersonalGroupId(player);
+            bool hasPurchase = HasAnyPurchase(player.Id);
+            group = R.Permissions.GetGroup(groupId);
+
+            if (group != null)
+            {
+                if (!WasCreated(player.Id) && !hasPurchase)
+                {
+                    Logger.LogError($"Refusing to use unregistered Rocket permissions group {groupId} for {player.Id}.");
+                    errorKey = "BypassGroupOwnershipInvalid";
+                    return false;
+                }
+                if (group.Members == null || !group.Members.Contains(player.Id) || group.Permissions == null)
+                {
+                    Logger.LogError($"Personal bypass group {groupId} is not owned by expected player {player.Id}.");
+                    errorKey = "BypassGroupOwnershipInvalid";
+                    return false;
+                }
+
+                List<Permission> previousPermissions = new List<Permission>(group.Permissions);
+                AddPurchasedPermissions(player.Id, group.Permissions);
+                if (group.Permissions.Count != previousPermissions.Count && !SaveGroup(group))
+                {
+                    group.Permissions = previousPermissions;
+                    errorKey = "BypassGroupSaveFailed";
+                    return false;
+                }
+
+                if (!WasCreated(player.Id))
+                {
+                    registry.CreatedPlayerIds.Add(player.Id);
+                    if (!IsShopCreated(player.Id))
+                    {
+                        registry.ShopCreatedPlayerIds.Add(player.Id);
+                    }
+                    if (!TrySaveRegistry())
+                    {
+                        registry.CreatedPlayerIds.RemoveAll(id =>
+                            string.Equals(id, player.Id, StringComparison.OrdinalIgnoreCase));
+                        registry.ShopCreatedPlayerIds.RemoveAll(id =>
+                            string.Equals(id, player.Id, StringComparison.OrdinalIgnoreCase));
+                        errorKey = "BypassGroupSaveFailed";
+                        return false;
+                    }
+                }
+                return true;
+            }
+
+            if (WasCreated(player.Id) && !IsShopCreated(player.Id) && !hasPurchase)
+            {
+                errorKey = "BypassGroupMissing";
+                return false;
+            }
+
+            group = CreateShopGroup(player);
+            RocketPermissionsProviderResult addResult;
+            try
+            {
+                addResult = R.Permissions.AddGroup(group);
+            }
+            catch (Exception exception)
+            {
+                Logger.LogError($"Could not create shop bypass group for {player.Id}: {exception.Message}");
+                errorKey = "BypassGroupSaveFailed";
+                return false;
+            }
+            if (addResult != RocketPermissionsProviderResult.Success)
+            {
+                Logger.LogError($"Could not create shop bypass group for {player.Id}: {addResult}.");
+                errorKey = "BypassGroupSaveFailed";
+                return false;
+            }
+
+            if (!WasCreated(player.Id))
+            {
+                registry.CreatedPlayerIds.Add(player.Id);
+            }
+            if (!IsShopCreated(player.Id))
+            {
+                registry.ShopCreatedPlayerIds.Add(player.Id);
+            }
+            if (!TrySaveRegistry())
+            {
+                registry.CreatedPlayerIds.RemoveAll(id =>
+                    string.Equals(id, player.Id, StringComparison.OrdinalIgnoreCase));
+                registry.ShopCreatedPlayerIds.RemoveAll(id =>
+                    string.Equals(id, player.Id, StringComparison.OrdinalIgnoreCase));
+                try
+                {
+                    RocketPermissionsProviderResult deleteResult = R.Permissions.DeleteGroup(group.Id);
+                    if (deleteResult != RocketPermissionsProviderResult.Success)
+                    {
+                        Logger.LogError($"Could not roll back shop bypass group {group.Id} after registry save failed: {deleteResult}.");
+                    }
+                }
+                catch (Exception exception)
+                {
+                    Logger.LogError($"Could not roll back shop bypass group {group.Id} after registry save failed: {exception.Message}");
+                }
+
+                errorKey = "BypassGroupSaveFailed";
+                return false;
+            }
+
+            AddPurchasedPermissions(player.Id, group.Permissions);
+            if (group.Permissions.Count > 0 && !SaveGroup(group))
+            {
+                errorKey = "BypassGroupSaveFailed";
+                return false;
+            }
+
+            return true;
+        }
+
+        private static RocketPermissionsGroup CreateShopGroup(UnturnedPlayer player)
+        {
+            return new RocketPermissionsGroup
+            {
+                Id = GetPersonalGroupId(player),
+                DisplayName = null,
+                Prefix = null,
+                Suffix = null,
+                Color = null,
+                ParentGroup = null,
+                Members = new List<string> { player.Id },
+                Permissions = new List<Permission>()
+            };
+        }
+
+        private bool TryAttachDonorParent(
+            RocketPermissionsGroup group,
+            DonationBypassTier tier,
+            out string errorKey)
+        {
+            errorKey = null;
+            if (string.Equals(group.ParentGroup, tier.GroupId, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            string previousParentGroup = group.ParentGroup;
+            group.ParentGroup = tier.GroupId;
+            if (SaveGroup(group))
+            {
+                return true;
+            }
+
+            group.ParentGroup = previousParentGroup;
+            errorKey = "BypassGroupSaveFailed";
+            return false;
+        }
+
+        private bool TryRefund(string playerId, decimal amount)
+        {
+            if (amount <= 0)
+            {
+                return true;
+            }
+
+            decimal previousBalance;
+            decimal currentBalance;
+            string errorKey;
+            if (economyService.TryChangeBalance(
+                playerId,
+                amount,
+                out previousBalance,
+                out currentBalance,
+                out errorKey))
+            {
+                return true;
+            }
+
+            Logger.LogError($"Could not refund {amount.ToString(CultureInfo.InvariantCulture)} to {playerId} after a bypass purchase failure ({errorKey}).");
+            return false;
+        }
+
+        private bool TrySavePurchaseRegistry()
+        {
+            try
+            {
+                purchaseStorage.Save(purchaseRegistry);
+                return true;
+            }
+            catch (Exception exception)
+            {
+                Logger.LogError("Failed to save BypassPurchases.json: " + exception.Message);
+                return false;
+            }
+        }
+
+        private bool HasAnyPurchase(string playerId)
+        {
+            return purchaseRegistry.Purchases.Any(purchase => purchase != null &&
+                string.Equals(purchase.PlayerId, playerId, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private bool HasPurchasedPermission(string playerId, string bypassPermission)
+        {
+            return purchaseRegistry.Purchases.Any(purchase => purchase != null &&
+                string.Equals(purchase.PlayerId, playerId, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(purchase.BypassPermission, bypassPermission, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private HashSet<string> GetPurchasedPermissions(string playerId)
+        {
+            return new HashSet<string>(
+                purchaseRegistry.Purchases
+                    .Where(purchase => purchase != null &&
+                        string.Equals(purchase.PlayerId, playerId, StringComparison.OrdinalIgnoreCase) &&
+                        !string.IsNullOrWhiteSpace(purchase.BypassPermission))
+                    .Select(purchase => purchase.BypassPermission),
+                StringComparer.OrdinalIgnoreCase);
+        }
+
+        private void AddPurchasedPermissions(string playerId, List<Permission> permissions)
+        {
+            foreach (string bypassPermission in GetPurchasedPermissions(playerId))
+            {
+                if (!HasGroupPermission(permissions, bypassPermission))
+                {
+                    permissions.Add(new Permission(bypassPermission, 0));
+                }
+            }
+        }
+
+        private bool IsShopCreated(string playerId)
+        {
+            return registry.ShopCreatedPlayerIds.Any(id =>
+                string.Equals(id, playerId, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static bool HasGroupPermission(RocketPermissionsGroup group, string bypassPermission)
+        {
+            return group != null && HasGroupPermission(group.Permissions, bypassPermission);
+        }
+
+        private static bool HasGroupPermission(List<Permission> permissions, string bypassPermission)
+        {
+            return permissions != null && permissions.Any(permission => permission != null &&
+                string.Equals(permission.Name, bypassPermission, StringComparison.OrdinalIgnoreCase));
         }
 
         private bool TryCancelRemoval(UnturnedPlayer player, BypassType type)
@@ -519,6 +1343,25 @@ namespace CCRP_Plugin.Services
             if (string.IsNullOrWhiteSpace(bypassPermission))
             {
                 errorKey = "BypassNotEligible";
+                return false;
+            }
+
+            if (HasPurchasedPermission(player.Id, bypassPermission))
+            {
+                if (!group.Permissions.Any(permission => permission != null &&
+                        string.Equals(permission.Name, bypassPermission, StringComparison.OrdinalIgnoreCase)))
+                {
+                    group.Permissions.Add(new Permission(bypassPermission, 0));
+                    if (!SaveGroup(group))
+                    {
+                        group.Permissions.RemoveAll(permission =>
+                            string.Equals(permission.Name, bypassPermission, StringComparison.OrdinalIgnoreCase));
+                        errorKey = "BypassGroupSaveFailed";
+                        return false;
+                    }
+                }
+
+                errorKey = "BypassPurchasedLocked";
                 return false;
             }
 
@@ -558,11 +1401,19 @@ namespace CCRP_Plugin.Services
             }
             long maximumBypasses = matchingTiers.Sum(tier => (long)tier.MaxBypasses);
 
+            if (IsShopCreated(player.Id) && !TryAttachDonorParent(group, matchingTiers[0], out errorKey))
+            {
+                return false;
+            }
+
             HashSet<string> knownBypassPermissions = GetKnownBypassPermissions();
+            HashSet<string> purchasedPermissions = GetPurchasedPermissions(player.Id);
             int claimedCount = group.Permissions
                 .Where(permission => permission != null)
                 .Select(permission => permission.Name)
-                .Where(name => !string.IsNullOrWhiteSpace(name) && knownBypassPermissions.Contains(name))
+                .Where(name => !string.IsNullOrWhiteSpace(name) &&
+                    knownBypassPermissions.Contains(name) &&
+                    !purchasedPermissions.Contains(name))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Count();
 
@@ -616,8 +1467,9 @@ namespace CCRP_Plugin.Services
             string currentPermission;
             if (expectedType == BypassType.Item)
             {
-                GiveSoftBlacklist entry = (plugin.Blacklists.GiveAndPickupItemBlacklist ?? new List<GiveSoftBlacklist>())
-                    .FirstOrDefault(item => item != null && item.Id == pending.Id);
+                GiveSoftBlacklist entry = plugin.FindApplicableItemBlacklistEntry(
+                    plugin.Blacklists.GiveAndPickupItemBlacklist ?? new List<GiveSoftBlacklist>(),
+                    pending.Id);
                 currentPermission = entry == null ? null : entry.Bypass;
             }
             else
@@ -630,6 +1482,12 @@ namespace CCRP_Plugin.Services
             if (!string.Equals(currentPermission, pending.Permission, StringComparison.OrdinalIgnoreCase))
             {
                 errorKey = "BypassRemovalTargetChanged";
+                return false;
+            }
+
+            if (HasPurchasedPermission(player.Id, pending.Permission))
+            {
+                errorKey = "BypassPurchasedLocked";
                 return false;
             }
 
@@ -683,15 +1541,28 @@ namespace CCRP_Plugin.Services
 
         private List<GiveSoftBlacklist> GetEligibleItemEntries()
         {
-            HashSet<ushort> excludedIds = new HashSet<ushort>(
-                (plugin.Blacklists.GiveItemBlacklist ?? new List<GiveSoftBlacklist>())
-                    .Concat(plugin.Blacklists.PickupItemBlacklist ?? new List<GiveSoftBlacklist>())
-                    .Where(item => item != null)
-                    .Select(item => item.Id));
+            List<GiveSoftBlacklist> excludedEntries = (plugin.Blacklists.GiveItemBlacklist ?? new List<GiveSoftBlacklist>())
+                .Concat(plugin.Blacklists.PickupItemBlacklist ?? new List<GiveSoftBlacklist>())
+                .Where(item => item != null)
+                .ToList();
 
             return (plugin.Blacklists.GiveAndPickupItemBlacklist ?? new List<GiveSoftBlacklist>())
-                .Where(item => item != null && !excludedIds.Contains(item.Id) && IsAllowedPermission(item.Bypass))
+                .Where(item => item != null &&
+                    !excludedEntries.Any(excluded => HasSameItemSelector(item, excluded)) &&
+                    IsAllowedPermission(item.Bypass))
                 .ToList();
+        }
+
+        private static bool HasSameItemSelector(GiveSoftBlacklist first, GiveSoftBlacklist second)
+        {
+            if (first.IsItemTypeEntry != second.IsItemTypeEntry)
+            {
+                return false;
+            }
+
+            return first.IsItemTypeEntry
+                ? string.Equals(first.ItemType, second.ItemType, StringComparison.OrdinalIgnoreCase)
+                : first.Id == second.Id;
         }
 
         private HashSet<string> GetKnownBypassPermissions()

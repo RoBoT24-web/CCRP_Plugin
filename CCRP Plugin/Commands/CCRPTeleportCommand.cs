@@ -34,6 +34,43 @@ namespace CCRP_Plugin.Commands
             CCRPPlugin.Commands.CommandExceptionHandler.ExecuteSafely(caller, Name, () => ExecuteCore(caller, command));
         }
 
+        private static bool TeleportToPlayer(UnturnedPlayer player, UnturnedPlayer target)
+        {
+            InteractableVehicle vehicle = target.CurrentVehicle;
+            if (vehicle != null && vehicle.tryAddPlayer(out byte seat, player.Player))
+            {
+                return true;
+            }
+
+            if (player.Player.teleportToPlayer(target.Player))
+            {
+                return true;
+            }
+
+            // Original method failed (tight space or full vehicle): probe nearby positions.
+            Vector3 origin = target.Position;
+            float yaw = target.Player.look.yaw;
+            float[] radii = { 1.5f, 3f, 5f };
+            float[] heights = { 0.5f, 2f };
+            foreach (float radius in radii)
+            {
+                for (int i = 0; i < 8; i++)
+                {
+                    float angle = i * 45f * Mathf.Deg2Rad;
+                    foreach (float height in heights)
+                    {
+                        Vector3 candidate = origin + new Vector3(Mathf.Cos(angle) * radius, height, Mathf.Sin(angle) * radius);
+                        if (player.Player.teleportToLocation(candidate, yaw))
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            return false;
+        }
+
         private void ExecuteCore(IRocketPlayer caller, string[] command)
         {
             UnturnedPlayer player = (UnturnedPlayer)caller;
@@ -61,7 +98,17 @@ namespace CCRP_Plugin.Commands
                         Logger.Log($"{caller.DisplayName} ({caller.Id}) didn't find a destination (/teleport)!");
                         return;
                     }
-                        player.Player.teleportToPlayer(otherPlayer.Player);
+                        if (player.CurrentVehicle != null)
+                        {
+                            VehicleManager.forceRemovePlayer(player.CSteamID);
+                        }
+
+                        if (!TeleportToPlayer(player, otherPlayer))
+                        {
+                            UnturnedChat.Say(caller, Main.Instance.Translate("TeleportFailedToFindDest"), Main.Instance.MessageColor);
+                            Logger.Log($"{caller.DisplayName} ({caller.Id}) couldn't find a safe spot near {otherPlayer.DisplayName} (/teleport)!");
+                            return;
+                        }
 
                         string playerX = otherPlayer.Position.x.ToString();
                         string playerY = otherPlayer.Position.y.ToString();
